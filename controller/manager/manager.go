@@ -19,6 +19,7 @@ import (
 	"github.com/citadel/citadel/scheduler"
 	r "github.com/dancannon/gorethink"
 	"github.com/gorilla/sessions"
+	"github.com/samalba/dockerclient"
 	"github.com/shipyard/shipyard"
 	"github.com/shipyard/shipyard/dockerhub"
 )
@@ -115,6 +116,10 @@ func (m *Manager) initdb() {
 	}
 }
 
+//主要用来根据 数据库中的Engine信息，初始化当前的Cluster管理器，
+// 因为Cluster是非面向数据库的，只在内存中管理了若干个 engine,
+//这里如果 engine发生了变动，那么则需要更新内存中 cluster的engine序列。
+//这里实际上是直接把 ClusterManage直接换了一个。感觉用Refresh会更好。
 func (m *Manager) init() []*shipyard.Engine {
 	engines := []*shipyard.Engine{}
 	res, err := r.Table(tblNameConfig).Run(m.session)
@@ -141,8 +146,15 @@ func (m *Manager) init() []*shipyard.Engine {
 		if err := setEngineClient(d.Engine, tlsConfig); err != nil {
 			logger.Errorf("error setting tls config for engine: %s", err)
 		}
+
 		engs = append(engs, d.Engine)
 		logger.Infof("loaded engine id=%s addr=%s", d.Engine.ID, d.Engine.Addr)
+
+		if containers,err := d.ListContainers();err!=nil{
+		 	d.Containers=containers
+		 	logger.infof("loaded engine containers count= %d",len(containers))
+		}
+
 	}
 	clusterManager, err := cluster.New(scheduler.NewResourceManager(), engs...)
 	if err != nil {
@@ -324,6 +336,9 @@ func (m *Manager) AddEngine(engine *shipyard.Engine) error {
 		err := fmt.Errorf("Received status code '%d' when contacting %s", stat, engine.Engine.Addr)
 		return err
 	}
+
+	dockerclient.NewDockerClient(, tlsConfig)
+
 	if _, err := r.Table(tblNameConfig).Insert(engine).RunWrite(m.session); err != nil {
 		return err
 	}
@@ -1124,4 +1139,75 @@ func (m *Manager) Scale(container *citadel.Container, count int) error {
 		logger.Info("no need to scale")
 	}
 	return nil
+}
+
+/*******************************************/
+//find engine by engine id
+func (m *Manager) xEngine(engineid string) shipyard.Engine {
+	for _, e := range m.engines {
+		if e.ID == engineid {
+			return e
+		}
+	}
+
+	return nil
+}
+
+//find engine by container id
+func (m *Manager) xEngineByContainerID(containerID string) shipyard.Engine {
+	for _, e := range m.engines {
+		for _, c := range e.Containers {
+			if containerID == c.ID {
+				return e
+			}
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) XPing(engineid string, w http.ResponseWriter, r *http.Request) {
+
+	engine := m.xEngine(engineid)
+
+	if engine == nil {
+		handlerFuncError(engineid+ "对应的Engine不存在。 ", w, r)
+		return
+	}
+
+	m.xTransform(engine.Engine.addr, w, r)
+	return
+}
+
+func (m *Manager) XInspect(containerID string, w http.ResponseWriter, r *http.Request) {
+	e := m.xEngineByContainerID(containerID)
+
+	if e == nil {
+		handlerFuncError("Inspect出错 未找到 containerID"+containerID+"所在的engine", w, r)
+		return
+	}
+
+	m.xTransform(e.Engine.addr, w, r)
+	return
+}
+
+func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	fmt.Fprintf(w,msg)
+	return
+}
+
+func (m *Manager) xTransform(addr string, w http.ResponseWriter, r *http.Request) (handler http.HandleFunc) {
+	fwd, err := forward.New()
+
+	req.URL, err = url.ParseRequestURI(addr)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fwd.ServeHTTP(w, req)
+
+	return
 }

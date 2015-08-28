@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/citadel/citadel"
+
+	"github.com/samalba/dockerclient"
 )
 
 const (
@@ -30,6 +32,7 @@ type (
 		Engine         *citadel.Engine `json:"engine,omitempty" gorethink:"engine,omitempty"`
 		Health         *Health         `json:"health,omitempty" gorethink:"health,omitempty"`
 		DockerVersion  string          `json:"docker_version,omitempty"`
+		Containers     []*DockerContainer
 	}
 )
 
@@ -89,4 +92,21 @@ func (e *Engine) Ping() (int, error) {
 		status = resp.StatusCode
 	}
 	return status, nil
+}
+
+// func (e *Engine) InspectContainer(id) {
+// 	info, err := e.client.InspectContainer(id)
+// 	if err != nil {
+// 		return err
+// 	}
+// }
+
+func (e *Engine) ListContainers() ([]*dockerclient.Container, error) {
+
+	containers, err := e.Engine.client.ListContainers(true)
+	if err != nil {
+		return containers, err
+	}
+
+	return containers, nil
 }
