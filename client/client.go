@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/citadel/citadel"
-	"github.com/shipyard/shipyard"
-	"github.com/shipyard/shipyard/dockerhub"
+	"github.com/linecheng/shipyard"
+	"github.com/linecheng/shipyard/dockerhub"
 )
 
 type (

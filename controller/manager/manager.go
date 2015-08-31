@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -19,9 +20,10 @@ import (
 	"github.com/citadel/citadel/scheduler"
 	r "github.com/dancannon/gorethink"
 	"github.com/gorilla/sessions"
-	"github.com/samalba/dockerclient"
-	"github.com/shipyard/shipyard"
-	"github.com/shipyard/shipyard/dockerhub"
+	"github.com/linecheng/shipyard"
+	"github.com/linecheng/shipyard/dockerhub"
+	"github.com/mailgun/oxy/forward"
+	_ "github.com/samalba/dockerclient"
 )
 
 const (
@@ -149,10 +151,17 @@ func (m *Manager) init() []*shipyard.Engine {
 
 		engs = append(engs, d.Engine)
 		logger.Infof("loaded engine id=%s addr=%s", d.Engine.ID, d.Engine.Addr)
+		logger.Infof("begin to get containers")
+		var (
+			containers []*shipyard.DockerContainer
+			errs       error
+		)
+		if containers, errs = d.ListContainers(); errs == nil {
+			d.Containers = containers
+			logger.Infof("loaded engine containers count= %d", len(containers))
 
-		if containers,err := d.ListContainers();err!=nil{
-		 	d.Containers=containers
-		 	logger.infof("loaded engine containers count= %d",len(containers))
+		} else {
+			logger.Errorf("error get containers : %s , error is %s", d.Engine.Addr, errs)
 		}
 
 	}
@@ -336,8 +345,6 @@ func (m *Manager) AddEngine(engine *shipyard.Engine) error {
 		err := fmt.Errorf("Received status code '%d' when contacting %s", stat, engine.Engine.Addr)
 		return err
 	}
-
-	dockerclient.NewDockerClient(, tlsConfig)
 
 	if _, err := r.Table(tblNameConfig).Insert(engine).RunWrite(m.session); err != nil {
 		return err
@@ -1143,9 +1150,12 @@ func (m *Manager) Scale(container *citadel.Container, count int) error {
 
 /*******************************************/
 //find engine by engine id
-func (m *Manager) xEngine(engineid string) shipyard.Engine {
+func (m *Manager) xEngine(engineid string) *shipyard.Engine {
+	fmt.Println(m.engines)
+	fmt.Println(engineid)
 	for _, e := range m.engines {
-		if e.ID == engineid {
+		fmt.Println(e.ID)
+		if e.Engine.ID == engineid {
 			return e
 		}
 	}
@@ -1154,10 +1164,10 @@ func (m *Manager) xEngine(engineid string) shipyard.Engine {
 }
 
 //find engine by container id
-func (m *Manager) xEngineByContainerID(containerID string) shipyard.Engine {
+func (m *Manager) xEngineByContainerID(containerID string) *shipyard.Engine {
 	for _, e := range m.engines {
 		for _, c := range e.Containers {
-			if containerID == c.ID {
+			if strings.HasPrefix(containerID, c.ID) {
 				return e
 			}
 		}
@@ -1167,15 +1177,16 @@ func (m *Manager) xEngineByContainerID(containerID string) shipyard.Engine {
 }
 
 func (m *Manager) XPing(engineid string, w http.ResponseWriter, r *http.Request) {
-
+	fmt.Println("in manager.xping")
 	engine := m.xEngine(engineid)
-
+	fmt.Println("------>get engine")
+	fmt.Println(engine)
 	if engine == nil {
-		handlerFuncError(engineid+ "对应的Engine不存在。 ", w, r)
+		handlerFuncError(engineid+"对应的Engine不存在。 ", w, r)
 		return
 	}
-
-	m.xTransform(engine.Engine.addr, w, r)
+	fmt.Println("----->begin transform")
+	m.xTransform(engine.Engine.Addr, w, r)
 	return
 }
 
@@ -1187,17 +1198,17 @@ func (m *Manager) XInspect(containerID string, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	m.xTransform(e.Engine.addr, w, r)
+	m.xTransform(e.Engine.Addr, w, r)
 	return
 }
 
 func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	fmt.Fprintf(w,msg)
+	fmt.Fprintf(w, msg)
 	return
 }
 
-func (m *Manager) xTransform(addr string, w http.ResponseWriter, r *http.Request) (handler http.HandleFunc) {
+func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Request) (handler http.HandlerFunc) {
 	fwd, err := forward.New()
 
 	req.URL, err = url.ParseRequestURI(addr)
@@ -1206,7 +1217,8 @@ func (m *Manager) xTransform(addr string, w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	fmt.Println("-----> ServeHTTP req is")
+	fmt.Println(req)
 	fwd.ServeHTTP(w, req)
 
 	return

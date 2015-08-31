@@ -24,6 +24,6 @@ This would enable provisioning of Docker Engines in all providers supported by M
 ### Docker Compose Integration
 There has been a long standing request for 
 [Docker Compose](https://github.com/docker/fig) (Fig) integration 
-(https://github.com/shipyard/shipyard/issues/172 & 
-https://github.com/shipyard/shipyard/issues/270).
+(https://github.com/linecheng/shipyard/issues/172 & 
+https://github.com/linecheng/shipyard/issues/270).
 We want enable deploying containers from Docker Compose configuration definitions.

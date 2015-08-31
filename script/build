@@ -9,4 +9,4 @@ fi
 
 echo "Building Shipyard $TAG"
 docker build -t shipyard-build -f Dockerfile.build .
-docker run -ti --rm -e TAG=$TAG -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd):/go/src/github.com/shipyard/shipyard -w /go/src/github.com/shipyard/shipyard/controller shipyard-build make TAG=$TAG image
+docker run -ti --rm -e TAG=$TAG -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd):/go/src/github.com/linecheng/shipyard -w /go/src/github.com/linecheng/shipyard/controller shipyard-build make TAG=$TAG image

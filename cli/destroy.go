@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/codegangsta/cli"
-	"github.com/shipyard/shipyard/client"
+	"github.com/linecheng/shipyard/client"
 )
 
 var destroyCommand = cli.Command{

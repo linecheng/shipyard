@@ -38,6 +38,11 @@ func (e *Engine) SetClient(c *dockerclient.DockerClient) {
 	e.client = c
 }
 
+func (e *Engine) GetClient() (c *dockerclient.DockerClient) {
+	c = e.client
+	return
+}
+
 func (e *Engine) SetClientAuth(username, password, email string) {
 	e.clientAuth = &dockerclient.AuthConfig{
 		Username: username,

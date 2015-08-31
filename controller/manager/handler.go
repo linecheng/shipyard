@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/citadel/citadel"
-	"github.com/shipyard/shipyard"
+	"github.com/linecheng/shipyard"
 )
 
 type (

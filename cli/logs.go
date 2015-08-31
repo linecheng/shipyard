@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/codegangsta/cli"
-	"github.com/shipyard/shipyard/client"
+	"github.com/linecheng/shipyard/client"
 )
 
 var logsCommand = cli.Command{

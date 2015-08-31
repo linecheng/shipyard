@@ -6,7 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/codegangsta/cli"
-	"github.com/shipyard/shipyard/client"
+	"github.com/linecheng/shipyard/client"
 )
 
 var infoCommand = cli.Command{

@@ -11,7 +11,7 @@ import (
 
 	"github.com/citadel/citadel"
 
-	"github.com/samalba/dockerclient"
+	_ "github.com/samalba/dockerclient"
 )
 
 const (
@@ -101,12 +101,18 @@ func (e *Engine) Ping() (int, error) {
 // 	}
 // }
 
-func (e *Engine) ListContainers() ([]*dockerclient.Container, error) {
+func (e *Engine) ListContainers() (out []*DockerContainer, err error) {
 
-	containers, err := e.Engine.client.ListContainers(true)
+	out = []*DockerContainer{}
+	containers, err := e.Engine.GetClient().ListContainers(true, false, "")
 	if err != nil {
-		return containers, err
+		return
 	}
 
-	return containers, nil
+	for _, c := range containers {
+		item := &DockerContainer{ID: c.Id, Names: c.Names}
+		out = append(out, item)
+	}
+
+	return out, nil
 }

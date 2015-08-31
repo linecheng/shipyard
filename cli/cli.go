@@ -5,7 +5,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
-	"github.com/shipyard/shipyard"
+	"github.com/linecheng/shipyard"
 )
 
 var (

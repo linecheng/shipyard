@@ -5,7 +5,7 @@ import (
 
 	"github.com/citadel/citadel"
 	"github.com/codegangsta/cli"
-	"github.com/shipyard/shipyard/client"
+	"github.com/linecheng/shipyard/client"
 )
 
 var runCommand = cli.Command{

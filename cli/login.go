@@ -11,7 +11,7 @@ import (
 
 	"github.com/codegangsta/cli"
 	"github.com/howeyc/gopass"
-	"github.com/shipyard/shipyard/client"
+	"github.com/linecheng/shipyard/client"
 )
 
 var loginCommand = cli.Command{

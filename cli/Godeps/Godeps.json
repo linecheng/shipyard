@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/shipyard/shipyard/cli",
+	"ImportPath": "github.com/linecheng/shipyard/cli",
 	"GoVersion": "go1.3.3",
 	"Deps": [
 		{

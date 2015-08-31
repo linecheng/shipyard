@@ -15,11 +15,11 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
-	"github.com/shipyard/shipyard"
-	"github.com/shipyard/shipyard/controller/manager"
-	"github.com/shipyard/shipyard/controller/middleware/access"
-	"github.com/shipyard/shipyard/controller/middleware/auth"
-	"github.com/shipyard/shipyard/dockerhub"
+	"github.com/linecheng/shipyard"
+	"github.com/linecheng/shipyard/controller/manager"
+	"github.com/linecheng/shipyard/controller/middleware/access"
+	"github.com/linecheng/shipyard/controller/middleware/auth"
+	"github.com/linecheng/shipyard/dockerhub"
 
 	"github.com/mailgun/oxy/forward"
 	"net/url"
@@ -704,9 +704,9 @@ func hubWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getRemoteAPIRedirect() (redirect http.HandleFunc) {
+func getRemoteAPIRedirect() (redirect http.HandlerFunc) {
 	fwd, err := forward.New()
-	redirect := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	redirect = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.URL, err = url.ParseRequestURI("http://192.168.5.152:8003")
 
 		if err != nil {
@@ -721,8 +721,9 @@ func getRemoteAPIRedirect() (redirect http.HandleFunc) {
 }
 
 func xPing(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	engineid := vars["id"]
+	r.ParseForm()
+	fmt.Println(r.Form)
+	engineid := r.Form["id"][0]
 
 	controllerManager.XPing(engineid, w, r)
 }
@@ -731,7 +732,7 @@ func xInspect(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	containerid := vars["id"]
 
-	controllerManager.XInpect(containerid, w, r)
+	controllerManager.XInspect(containerid, w, r)
 }
 
 func main() {
@@ -759,6 +760,7 @@ func main() {
 	)
 
 	logger.Infof("shipyard version %s", VERSION)
+	fmt.Println("test print")
 
 	controllerManager, mErr = manager.NewManager(rethinkdbAddr, rethinkdbDatabase, rethinkdbAuthKey, VERSION, disableUsageInfo)
 	if mErr != nil {
@@ -803,13 +805,6 @@ func main() {
 	apiRouter.HandleFunc("/api/webhookkeys/{id}", webhookKey).Methods("GET")
 	apiRouter.HandleFunc("/api/webhookkeys", addWebhookKey).Methods("POST")
 	apiRouter.HandleFunc("/api/webhookkeys/{id}", deleteWebhookKey).Methods("DELETE")
-
-	remoteAPIRedirect := getRemoteAPIRedirect()
-
-	// docker remote api router
-	remoteAPIRouter := mux.NewRouter()
-	remoteAPIRouter.HandleFunc("/_ping", xPing)
-	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
 
 	/*
 		m := map[string]map[string]http.HandlerFunc{
@@ -881,6 +876,20 @@ func main() {
 	apiAuthRouter.Use(negroni.HandlerFunc(apiAccessRequired.HandlerFuncWithNext))
 	apiAuthRouter.UseHandler(apiRouter)
 	globalMux.Handle("/api/", apiAuthRouter)
+
+	// docker remote api router
+	remoteAPIRouter := mux.NewRouter()
+	remoteAPIRouter.HandleFunc("/_ping", xPing)
+	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
+
+	remoteAPIAuthRouter := negroni.New()
+	remoteAPIAuthRequired := auth.NewAuthRequired(controllerManager)
+	remoteAPIAccessRequired := access.NewAccessRequired(controllerManager)
+	remoteAPIAuthRouter.Use(negroni.HandlerFunc(remoteAPIAuthRequired.HandlerFuncWithNext))
+	remoteAPIAuthRouter.Use(negroni.HandlerFunc(remoteAPIAccessRequired.HandlerFuncWithNext))
+	remoteAPIAuthRouter.UseHandler(remoteAPIRouter)
+	globalMux.Handle("/_ping", remoteAPIAuthRouter)
+	globalMux.Handle("/containers/", remoteAPIAuthRouter)
 
 	// account router ; protected by auth
 	accountRouter := mux.NewRouter()
