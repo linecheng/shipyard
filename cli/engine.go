@@ -9,8 +9,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/citadel/citadel"
 	"github.com/codegangsta/cli"
+	"github.com/linecheng/citadel"
 	"github.com/linecheng/shipyard"
 	"github.com/linecheng/shipyard/client"
 )

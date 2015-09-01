@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/citadel/citadel"
 	"github.com/codegangsta/cli"
+	"github.com/linecheng/citadel"
 	"github.com/linecheng/shipyard/client"
 )
 
