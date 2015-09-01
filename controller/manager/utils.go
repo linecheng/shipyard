@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/citadel/citadel"
+	"github.com/linecheng/citadel"
 )
 
 func getTLSConfig(caCert, sslCert, sslKey []byte) (*tls.Config, error) {

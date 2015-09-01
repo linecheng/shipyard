@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/citadel/citadel"
+	"github.com/linecheng/citadel"
 	"github.com/linecheng/shipyard"
 )
 

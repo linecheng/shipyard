@@ -10,20 +10,21 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/citadel/citadel"
-	"github.com/citadel/citadel/cluster"
-	"github.com/citadel/citadel/scheduler"
 	r "github.com/dancannon/gorethink"
 	"github.com/gorilla/sessions"
+	"github.com/linecheng/citadel"
+	"github.com/linecheng/citadel/cluster"
+	"github.com/linecheng/citadel/scheduler"
 	"github.com/linecheng/shipyard"
 	"github.com/linecheng/shipyard/dockerhub"
 	"github.com/mailgun/oxy/forward"
-	_ "github.com/samalba/dockerclient"
+	"github.com/samalba/dockerclient"
 )
 
 const (
@@ -169,6 +170,9 @@ func (m *Manager) init() []*shipyard.Engine {
 	if err != nil {
 		logger.Fatal(err)
 	}
+
+	clusterManager.SetXResourceManager(scheduler.NewXResourceManager())
+
 	if err := clusterManager.Events(&EventHandler{Manager: m}); err != nil {
 		logger.Fatalf("unable to register event handler: %s", err)
 	}
@@ -187,6 +191,23 @@ func (m *Manager) init() []*shipyard.Engine {
 	clusterManager.RegisterScheduler("unique", uniqueScheduler)
 	clusterManager.RegisterScheduler("multi", multiScheduler)
 	clusterManager.RegisterScheduler("host", hostScheduler)
+
+	var (
+		xlabelScheduler  = &scheduler.XLabelScheduler{}
+		xuniqueScheduler = &scheduler.XUniqueScheduler{}
+		xhostScheduler   = &scheduler.XHostScheduler{}
+
+		xmultiScheduler = scheduler.NewXMultiScheduler(
+			xlabelScheduler,
+			xuniqueScheduler,
+		)
+	)
+	// TODO: refactor to be configurable
+	clusterManager.RegisterXScheduler("service", xlabelScheduler)
+	clusterManager.RegisterXScheduler("unique", xuniqueScheduler)
+	clusterManager.RegisterXScheduler("multi", xmultiScheduler)
+	clusterManager.RegisterXScheduler("host", xhostScheduler)
+
 	m.clusterManager = clusterManager
 	// start extension health check
 	go m.extensionHealthCheck()
@@ -1200,6 +1221,30 @@ func (m *Manager) XInspect(containerID string, w http.ResponseWriter, r *http.Re
 
 	m.xTransform(e.Engine.Addr, w, r)
 	return
+}
+
+func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*dockerclient.RespContainersCreate, error) {
+	launched := []*dockerclient.RespContainersCreate{}
+
+	if count != 1 {
+		return "", errors.New("XRun参数错误。count值只能为1。当前值为 " + strconv.Itoa(count))
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(count)
+	var runErr error
+	for i := 0; i < count; i++ {
+		go func(wg *sync.WaitGroup) {
+			container, err := m.ClusterManager().XStart(image, pull)
+			if err != nil {
+				runErr = err
+			}
+			launched = append(launched, container)
+			wg.Done()
+		}(&wg)
+	}
+	wg.Wait()
+	return launched[0], runErr
 }
 
 func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
