@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/citadel/citadel"
+	"github.com/linecheng/citadel"
 
 	_ "github.com/samalba/dockerclient"
 )

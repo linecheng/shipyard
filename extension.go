@@ -1,6 +1,6 @@
 package shipyard
 
-import "github.com/citadel/citadel"
+import "github.com/linecheng/citadel"
 
 type (
 	Extension struct {

@@ -3,7 +3,7 @@ package shipyard
 import (
 	"time"
 
-	"github.com/citadel/citadel"
+	"github.com/linecheng/citadel"
 )
 
 type Event struct {
