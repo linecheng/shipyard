@@ -10,11 +10,11 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/citadel/citadel"
 	"github.com/codegangsta/negroni"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
+	"github.com/linecheng/citadel"
 	"github.com/linecheng/shipyard"
 	"github.com/linecheng/shipyard/controller/manager"
 	"github.com/linecheng/shipyard/controller/middleware/access"
@@ -735,6 +735,51 @@ func xInspect(w http.ResponseWriter, r *http.Request) {
 	controllerManager.XInspect(containerid, w, r)
 }
 
+func xCreateContainer(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	p := r.FormValue("pull")
+	c := r.FormValue("count")
+	count := 1
+	pull := false
+	// if p != "" {
+	// 	pv, err := strconv.ParseBool(p)
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// 	pull = pv
+	// }
+	// if c != "" {
+	// 	cc, err := strconv.Atoi(c)
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// 	count = cc
+	// }
+
+	var containerconfig *citadel.ContainerConfig
+	if err := json.NewDecoder(r.Body).Decode(&containerconfig); err != nil {
+		logger.Warnf("error decoding ContainerConfig: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	launched, err := controllerManager.XRun(containerconfig, count, pull)
+	if err != nil {
+		logger.Warnf("error running container: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	if err := json.NewEncoder(w).Encode(launched); err != nil {
+		logger.Error(err)
+	}
+}
+
 func main() {
 	rHost := os.Getenv("RETHINKDB_PORT_28015_TCP_ADDR")
 	rPort := os.Getenv("RETHINKDB_PORT_28015_TCP_PORT")
@@ -881,6 +926,7 @@ func main() {
 	remoteAPIRouter := mux.NewRouter()
 	remoteAPIRouter.HandleFunc("/_ping", xPing)
 	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
+	remoteAPIRouter.HandleFunc("/containers/create", xCreate).Method("POST")
 
 	remoteAPIAuthRouter := negroni.New()
 	remoteAPIAuthRequired := auth.NewAuthRequired(controllerManager)
@@ -888,6 +934,7 @@ func main() {
 	remoteAPIAuthRouter.Use(negroni.HandlerFunc(remoteAPIAuthRequired.HandlerFuncWithNext))
 	remoteAPIAuthRouter.Use(negroni.HandlerFunc(remoteAPIAccessRequired.HandlerFuncWithNext))
 	remoteAPIAuthRouter.UseHandler(remoteAPIRouter)
+
 	globalMux.Handle("/_ping", remoteAPIAuthRouter)
 	globalMux.Handle("/containers/", remoteAPIAuthRouter)
 
