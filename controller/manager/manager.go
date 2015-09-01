@@ -1227,7 +1227,7 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 	launched := []*dockerclient.RespContainersCreate{}
 
 	if count != 1 {
-		return "", errors.New("XRun参数错误。count值只能为1。当前值为 " + strconv.Itoa(count))
+		return nil, errors.New("XRun参数错误。count值只能为1。当前值为 " + strconv.Itoa(count))
 	}
 
 	var wg sync.WaitGroup

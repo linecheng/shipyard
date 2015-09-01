@@ -737,8 +737,8 @@ func xInspect(w http.ResponseWriter, r *http.Request) {
 
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	p := r.FormValue("pull")
-	c := r.FormValue("count")
+	// p := r.FormValue("pull")
+	// c := r.FormValue("count")
 	count := 1
 	pull := false
 	// if p != "" {
@@ -822,16 +822,14 @@ func main() {
 	apiRouter.HandleFunc("/api/roles", deleteRole).Methods("DELETE")
 	apiRouter.HandleFunc("/api/cluster/info", clusterInfo).Methods("GET")
 
-	/*
-		apiRouter.HandleFunc("/api/containers", containers).Methods("GET")
-		apiRouter.HandleFunc("/api/containers", run).Methods("POST")
-		apiRouter.HandleFunc("/api/containers/{id}", inspectContainer).Methods("GET")
-		apiRouter.HandleFunc("/api/containers/{id}", destroy).Methods("DELETE")
-		apiRouter.HandleFunc("/api/containers/{id}/stop", stopContainer).Methods("GET")
-		apiRouter.HandleFunc("/api/containers/{id}/restart", restartContainer).Methods("GET")
-		apiRouter.HandleFunc("/api/containers/{id}/scale", scaleContainer).Methods("GET")
-		apiRouter.HandleFunc("/api/containers/{id}/logs", containerLogs).Methods("GET")
-	*/
+	apiRouter.HandleFunc("/api/containers", containers).Methods("GET")
+	apiRouter.HandleFunc("/api/containers", run).Methods("POST")
+	apiRouter.HandleFunc("/api/containers/{id}", inspectContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/{id}", destroy).Methods("DELETE")
+	apiRouter.HandleFunc("/api/containers/{id}/stop", stopContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/{id}/restart", restartContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/{id}/scale", scaleContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/{id}/logs", containerLogs).Methods("GET")
 
 	apiRouter.HandleFunc("/api/events", events).Methods("GET")
 	apiRouter.HandleFunc("/api/events", purgeEvents).Methods("DELETE")
@@ -851,65 +849,6 @@ func main() {
 	apiRouter.HandleFunc("/api/webhookkeys", addWebhookKey).Methods("POST")
 	apiRouter.HandleFunc("/api/webhookkeys/{id}", deleteWebhookKey).Methods("DELETE")
 
-	/*
-		m := map[string]map[string]http.HandlerFunc{
-			"GET": {
-				"/_ping":                          xPing,
-				"/events":                         remoteAPIRedirect,
-				"/info":                           remoteAPIRedirect,
-				"/version":                        remoteAPIRedirect,
-				"/images/json":                    remoteAPIRedirect,
-				"/images/viz":                     remoteAPIRedirect,
-				"/images/search":                  remoteAPIRedirect,
-				"/images/get":                     remoteAPIRedirect,
-				"/images/{name:.*}/get":           remoteAPIRedirect,
-				"/images/{name:.*}/history":       remoteAPIRedirect,
-				"/images/{name:.*}/json":          remoteAPIRedirect,
-				"/containers/ps":                  remoteAPIRedirect,
-				"/containers/json":                remoteAPIRedirect,
-				"/containers/{name:.*}/export":    remoteAPIRedirect,
-				"/containers/{name:.*}/changes":   remoteAPIRedirect,
-				"/containers/{name:.*}/json":      remoteAPIRedirect,
-				"/containers/{name:.*}/top":       remoteAPIRedirect,
-				"/containers/{name:.*}/logs":      remoteAPIRedirect,
-				"/containers/{name:.*}/stats":     remoteAPIRedirect,
-				"/containers/{name:.*}/attach/ws": remoteAPIRedirect,
-				"/exec/{execid:.*}/json":          remoteAPIRedirect,
-			},
-			"POST": {
-				"/auth":                         remoteAPIRedirect,
-				"/commit":                       remoteAPIRedirect,
-				"/build":                        remoteAPIRedirect,
-				"/images/create":                remoteAPIRedirect,
-				"/images/load":                  remoteAPIRedirect,
-				"/images/{name:.*}/push":        remoteAPIRedirect,
-				"/images/{name:.*}/tag":         remoteAPIRedirect,
-				"/containers/create":            remoteAPIRedirect,
-				"/containers/{name:.*}/kill":    remoteAPIRedirect,
-				"/containers/{name:.*}/pause":   remoteAPIRedirect,
-				"/containers/{name:.*}/unpause": remoteAPIRedirect,
-				"/containers/{name:.*}/rename":  remoteAPIRedirect,
-				"/containers/{name:.*}/restart": remoteAPIRedirect,
-				"/containers/{name:.*}/start":   remoteAPIRedirect,
-				"/containers/{name:.*}/stop":    remoteAPIRedirect,
-				"/containers/{name:.*}/wait":    remoteAPIRedirect,
-				"/containers/{name:.*}/resize":  remoteAPIRedirect,
-				"/containers/{name:.*}/attach":  remoteAPIRedirect,
-				"/containers/{name:.*}/copy":    remoteAPIRedirect,
-				"/containers/{name:.*}/exec":    remoteAPIRedirect,
-				"/exec/{execid:.*}/start":       remoteAPIRedirect,
-				"/exec/{execid:.*}/resize":      remoteAPIRedirect,
-			},
-			"DELETE": {
-				"/containers/{name:.*}": remoteAPIRedirect,
-				"/images/{name:.*}":     remoteAPIRedirect,
-			},
-			"OPTIONS": {
-				"": remoteAPIRedirect,
-			},
-		}
-	*/
-
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
 
@@ -926,7 +865,7 @@ func main() {
 	remoteAPIRouter := mux.NewRouter()
 	remoteAPIRouter.HandleFunc("/_ping", xPing)
 	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
-	remoteAPIRouter.HandleFunc("/containers/create", xCreate).Method("POST")
+	remoteAPIRouter.HandleFunc("/containers/create", xCreateContainer).Methods("POST")
 
 	remoteAPIAuthRouter := negroni.New()
 	remoteAPIAuthRequired := auth.NewAuthRequired(controllerManager)
