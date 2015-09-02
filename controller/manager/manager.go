@@ -1249,7 +1249,7 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 	return launched[0], runErr
 }
 
-func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request, int statusCode) {
+func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	fmt.Fprintf(w, msg)
 	return
@@ -1264,20 +1264,20 @@ func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
 	engineId := data["id"]
 	engine := m.xEngine(engineId)
 	if engine == nil {
-		return nil, errors.New("engineid=" + engineId + "对应的engine不存在")
+		return "", errors.New("engineid=" + engineId + "对应的engine不存在")
 	}
 
 	return engine.Engine.Addr, nil
 }
 
-func (m *Manager) LocateHostByContainerId(data map[string]string) *string {
+func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error) {
 	if data["id"] == "" {
 		return nil, errors.New("id 参数缺失")
 	}
 	containerid := data["id"]
 	engine := m.xEngineByContainerID(containerid)
 	if engine == nil {
-		return nil, errors.New("containerid =" + containerid + "对应的engine不存在")
+		return "", errors.New("containerid =" + containerid + "对应的engine不存在")
 	}
 
 	return engine.Engine.Addr, nil
