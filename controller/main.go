@@ -772,14 +772,15 @@ func xInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func transmitByEngineID(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	r.ParseForm()
 
-	if len(vars) == 0 || vars["id"] == "" {
+	if r.FormValue("id") == "" {
 		http.Error(w, "接口id参数不能为空", 400)
 		return
 	}
+	data := map[string]string{"id": r.FormValue("id")}
 
-	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, vars, w, r)
+	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, data, w, r)
 }
 
 func transmitByContainerID(w http.ResponseWriter, r *http.Request) {

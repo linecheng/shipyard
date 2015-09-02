@@ -1255,11 +1255,11 @@ func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-type AddressLocatedFunc func(map[string]string) string
+type AddressLocatedFunc func(map[string]string) (string, error)
 
 func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
 	if data["id"] == "" {
-		return nil, errors.New("id 参数缺失")
+		return "", errors.New("id 参数缺失")
 	}
 	engineId := data["id"]
 	engine := m.xEngine(engineId)
@@ -1272,7 +1272,7 @@ func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
 
 func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error) {
 	if data["id"] == "" {
-		return nil, errors.New("id 参数缺失")
+		return "", errors.New("id 参数缺失")
 	}
 	containerid := data["id"]
 	engine := m.xEngineByContainerID(containerid)
@@ -1284,7 +1284,7 @@ func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error
 }
 
 func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[string]string, w http.ResponseWriter, req *http.Request) error {
-	addr, err := hostAddressFunc(data)
+	addr, err := addressLocatedFunc(data)
 	if err != nil {
 		return err
 	}
@@ -1293,7 +1293,7 @@ func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[s
 	return nil
 }
 
-func (m *Manager) xTransform(addr XTransmitReq, w http.ResponseWriter, req *http.Request) {
+func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Request) {
 	fwd, err := forward.New()
 
 	req.URL, err = url.ParseRequestURI(addr)
