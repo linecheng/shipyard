@@ -704,6 +704,8 @@ func hubWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*******************************************/
+
 func getRemoteAPIRedirect() (redirect http.HandlerFunc) {
 	fwd, err := forward.New()
 	redirect = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -723,16 +725,72 @@ func getRemoteAPIRedirect() (redirect http.HandlerFunc) {
 func xPing(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	fmt.Println(r.Form)
-	engineid := r.Form["id"][0]
+
+	if len(r.Form) == 0 || r.FormValue("id") == "" {
+		http.Error(w, "_ping 接口id参数不能为空", 400)
+		return
+	}
+
+	engineid := r.FormValue("id")
 
 	controllerManager.XPing(engineid, w, r)
 }
 
 func xInspect(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["id"] == "" {
+		http.Error(w, "_ping 接口id参数不能为空", 400)
+		return
+	}
+
 	containerid := vars["id"]
 
 	controllerManager.XInspect(containerid, w, r)
+}
+
+func xEvents(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["id"] == "" {
+		http.Error(w, "events 接口id参数不能为空", 400)
+		return
+	}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, vars, w, r)
+}
+
+func xInfo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["id"] == "" {
+		http.Error(w, "info 接口id参数不能为空", 400)
+		return
+	}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, vars, w, r)
+}
+
+func transmitByEngineID(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["id"] == "" {
+		http.Error(w, "接口id参数不能为空", 400)
+		return
+	}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, vars, w, r)
+}
+
+func transmitByContainerID(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["id"] == "" {
+		http.Error(w, "接口id参数不能为空", 400)
+		return
+	}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, vars, w, r)
 }
 
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {
@@ -864,8 +922,12 @@ func main() {
 	// docker remote api router
 	remoteAPIRouter := mux.NewRouter()
 	remoteAPIRouter.HandleFunc("/_ping", xPing)
-	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
+	//remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
+	remoteAPIRouter.HandleFunc("/containers/{id}/json", transmitByContainerID)
 	remoteAPIRouter.HandleFunc("/containers/create", xCreateContainer).Methods("POST")
+	remoteAPIRouter.HandleFunc("/events", transmitByEngineID)
+	remoteAPIRouter.HandleFunc("/info", transmitByEngineID)
+	remoteAPIRouter.HandleFunc("/version", transmitByEngineID)
 
 	remoteAPIAuthRouter := negroni.New()
 	remoteAPIAuthRequired := auth.NewAuthRequired(controllerManager)
@@ -875,6 +937,9 @@ func main() {
 	remoteAPIAuthRouter.UseHandler(remoteAPIRouter)
 
 	globalMux.Handle("/_ping", remoteAPIAuthRouter)
+	globalMux.Handle("/info", remoteAPIAuthRouter)
+	globalMux.Handle("/version", remoteAPIAuthRouter)
+	globalMux.Handle("/events", remoteAPIAuthRouter)
 	globalMux.Handle("/containers/", remoteAPIAuthRouter)
 
 	// account router ; protected by auth

@@ -1198,14 +1198,16 @@ func (m *Manager) xEngineByContainerID(containerID string) *shipyard.Engine {
 }
 
 func (m *Manager) XPing(engineid string, w http.ResponseWriter, r *http.Request) {
+
 	fmt.Println("in manager.xping")
 	engine := m.xEngine(engineid)
 	fmt.Println("------>get engine")
 	fmt.Println(engine)
 	if engine == nil {
-		handlerFuncError(engineid+"对应的Engine不存在。 ", w, r)
+		http.Error(w, engineid+"对应的Engine不存在。 ", 400)
 		return
 	}
+
 	fmt.Println("----->begin transform")
 	m.xTransform(engine.Engine.Addr, w, r)
 	return
@@ -1247,13 +1249,51 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 	return launched[0], runErr
 }
 
-func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
+func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request, int statusCode) {
 	r.ParseForm()
 	fmt.Fprintf(w, msg)
 	return
 }
 
-func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Request) (handler http.HandlerFunc) {
+type AddressLocatedFunc func(map[string]string) string
+
+func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
+	if data["id"] == "" {
+		return nil, errors.New("id 参数缺失")
+	}
+	engineId := data["id"]
+	engine := m.xEngine(engineId)
+	if engine == nil {
+		return nil, errors.New("engineid=" + engineId + "对应的engine不存在")
+	}
+
+	return engine.Engine.Addr, nil
+}
+
+func (m *Manager) LocateHostByContainerId(data map[string]string) *string {
+	if data["id"] == "" {
+		return nil, errors.New("id 参数缺失")
+	}
+	containerid := data["id"]
+	engine := m.xEngineByContainerID(containerid)
+	if engine == nil {
+		return nil, errors.New("containerid =" + containerid + "对应的engine不存在")
+	}
+
+	return engine.Engine.Addr, nil
+}
+
+func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[string]string, w http.ResponseWriter, req *http.Request) error {
+	addr, err := hostAddressFunc(data)
+	if err != nil {
+		return err
+	}
+
+	m.xTransform(addr, w, req)
+	return nil
+}
+
+func (m *Manager) xTransform(addr XTransmitReq, w http.ResponseWriter, req *http.Request) {
 	fwd, err := forward.New()
 
 	req.URL, err = url.ParseRequestURI(addr)
