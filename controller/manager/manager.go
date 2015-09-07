@@ -1283,6 +1283,19 @@ func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error
 	return engine.Engine.Addr, nil
 }
 
+func (m *Manager) LocateHostByImgName(data map[string]string) (string, error) {
+	if data["name"] == "" {
+		return nil, errors.New("name 参数缺失")
+	}
+	imgname := data["name"]
+	engine := m.ClusterManager().GetEngineByImageName(imgname)
+	if engine == nil {
+		return "", errors.New("当前Engines中不存在任何名称为" + imgname + "的Image")
+	}
+
+	return engine.Engine.Addr, nil
+}
+
 func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[string]string, w http.ResponseWriter, req *http.Request) error {
 	addr, err := addressLocatedFunc(data)
 	if err != nil {
@@ -1307,4 +1320,11 @@ func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Reque
 	fwd.ServeHTTP(w, req)
 
 	return
+}
+
+func (m *Manager) XListContainers(all bool, size bool, filters string) {
+	return m.ClusterManager().XListContainers(all, size, filters)
+}
+func (m *Manager) XListImages() {
+	return m.ClusterManager().XListImages()
 }

@@ -771,6 +771,20 @@ func xInfo(w http.ResponseWriter, r *http.Request) {
 	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, vars, w, r)
 }
 
+func xListContainers(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
+
+	containers := controllerManager.ClusterManager().XListContainers(true, false, "")
+	json.NewEncoder(w).Encode(containers)
+}
+
+func xListImages(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
+
+	imgs := controllerManager.ClusterManager().XListImages()
+	json.NewEncoder(w).Encode(imgs)
+}
+
 func transmitByEngineID(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
@@ -792,6 +806,25 @@ func transmitByContainerID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, vars, w, r)
+}
+
+func transmitByImageName(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	if len(vars) == 0 || vars["name"] == "" {
+		http.Error(w, "接口name参数不能为空", 400)
+		return
+	}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByImgName, vars, w, r)
+}
+
+func xCommit(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	containerid := r.FormValue("container")
+	data := map[string]string{"id": containerid}
+
+	controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, data, w, r)
 }
 
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {
@@ -923,12 +956,54 @@ func main() {
 	// docker remote api router
 	remoteAPIRouter := mux.NewRouter()
 	remoteAPIRouter.HandleFunc("/_ping", xPing)
-	//remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
-	remoteAPIRouter.HandleFunc("/containers/{id}/json", transmitByContainerID)
-	remoteAPIRouter.HandleFunc("/containers/create", xCreateContainer).Methods("POST")
 	remoteAPIRouter.HandleFunc("/events", transmitByEngineID)
 	remoteAPIRouter.HandleFunc("/info", transmitByEngineID)
 	remoteAPIRouter.HandleFunc("/version", transmitByEngineID)
+	remoteAPIRouter.HandleFunc("/auth", transmitByEngineID).Methods("POST")
+
+	remoteAPIRouter.HandleFunc("/containers/json", xListContainers)
+	remoteAPIRouter.HandleFunc("/containers/create", xCreateContainer).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/json", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/top", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/logs", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/changes", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/export", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/stats", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/resize", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/Start", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/Stop", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/Restart", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/Kill", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/rename", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/pause", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/unpause", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/attach", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/wait", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}", transmitByContainerID).Methods("DELETE")
+	remoteAPIRouter.HandleFunc("/containers/{id}/copy", transmitByContainerID).Methods("POST")
+	remoteAPIRouter.HandleFunc("/containers/{id}/archive", transmitByContainerID).Methods("HEAD")
+	remoteAPIRouter.HandleFunc("/containers/{id}/archive", transmitByContainerID).Methods("GET") //todo
+	remoteAPIRouter.HandleFunc("/containers/{id}/archive", transmitByContainerID).Methods("PUT")
+	remoteAPIRouter.HandleFunc("/containers/{id}/exec", transmitByContainerID).Methods("POST")
+
+	remoteAPIRouter.HandleFunc("/images/json", xListImages)
+	//build image from a dockerfile //根据调度来创建 image ?
+	//create an image //
+	remoteAPIRouter.HandleFunc("/images/{name}/json", transmitByImageName)
+	remoteAPIRouter.HandleFunc("/images/{name}/history", transmitByImageName)
+	remoteAPIRouter.HandleFunc("/images/{name}/push", transmitByImageName).Methods("POST")
+	//tag an image into a repository //api的作用是什么
+	//remove an image //移除所有engine上的？还是指定engine .
+	//search images
+	//Get a tarball containing all images in a repository
+	//Get a tarball containing all images.
+	//Load a tarball with a set of images and tags into docker
+	//image tarball format
+	// exec start
+	//exec resize
+	//exec inspect
+
+	remoteAPIRouter.HandleFunc("/commit", xCommit).Methods("POST")
 
 	remoteAPIAuthRouter := negroni.New()
 	remoteAPIAuthRequired := auth.NewAuthRequired(controllerManager)
@@ -941,7 +1016,11 @@ func main() {
 	globalMux.Handle("/info", remoteAPIAuthRouter)
 	globalMux.Handle("/version", remoteAPIAuthRouter)
 	globalMux.Handle("/events", remoteAPIAuthRouter)
+	globalMux.Handle("/auth", remoteAPIAuthRouter)
+
 	globalMux.Handle("/containers/", remoteAPIAuthRouter)
+	globalMux.Handle("/images/", remoteAPIAuthRouter)
+	globalMux.Handle("/commit", remoteAPIAuthRouter)
 
 	// account router ; protected by auth
 	accountRouter := mux.NewRouter()
