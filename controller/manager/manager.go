@@ -1187,8 +1187,11 @@ func (m *Manager) xEngine(engineid string) *shipyard.Engine {
 //find engine by container id
 func (m *Manager) xEngineByContainerID(containerID string) *shipyard.Engine {
 	for _, e := range m.engines {
+		fmt.Println("find engine by container id " + containerID)
+		//fmt.Println(e)
 		for _, c := range e.Containers {
-			if strings.HasPrefix(containerID, c.ID) {
+			fmt.Println(c.ID)
+			if strings.HasPrefix(c.ID, containerID) {
 				return e
 			}
 		}
@@ -1255,11 +1258,24 @@ func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-type AddressLocatedFunc func(map[string]string) (string, error)
+type LocateError struct {
+	msg         string
+	ErrorStatus int
+}
 
-func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
+type AddressLocatedFunc func(map[string]string) (string, LocateError)
+
+func (err *LocateError) Error() string {
+	return msg
+}
+
+func newLocateError(_msg string, st int) LocateError {
+	return LocateError{msg: _msg, ErrorStatus: st}
+}
+
+func (m *Manager) LocateHostByEngineID(data map[string]string) (string, LocateError) {
 	if data["id"] == "" {
-		return "", errors.New("id 参数缺失")
+		return "", newLocateError("id 参数缺失", 400)
 	}
 	engineId := data["id"]
 	engine := m.xEngine(engineId)
@@ -1285,7 +1301,7 @@ func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error
 
 func (m *Manager) LocateHostByImgName(data map[string]string) (string, error) {
 	if data["name"] == "" {
-		return nil, errors.New("name 参数缺失")
+		return "", errors.New("name 参数缺失")
 	}
 	imgname := data["name"]
 	engine := m.ClusterManager().GetEngineByImageName(imgname)
@@ -1293,7 +1309,7 @@ func (m *Manager) LocateHostByImgName(data map[string]string) (string, error) {
 		return "", errors.New("当前Engines中不存在任何名称为" + imgname + "的Image")
 	}
 
-	return engine.Engine.Addr, nil
+	return engine.Addr, nil
 }
 
 func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[string]string, w http.ResponseWriter, req *http.Request) error {
@@ -1322,9 +1338,9 @@ func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Reque
 	return
 }
 
-func (m *Manager) XListContainers(all bool, size bool, filters string) {
+func (m *Manager) XListContainers(all bool, size bool, filters string) []*dockerclient.Container {
 	return m.ClusterManager().XListContainers(all, size, filters)
 }
-func (m *Manager) XListImages() {
+func (m *Manager) XListImages() []*dockerclient.Image {
 	return m.ClusterManager().XListImages()
 }
