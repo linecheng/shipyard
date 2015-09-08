@@ -794,7 +794,18 @@ func transmitByEngineID(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]string{"id": r.FormValue("id")}
 
-	controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, data, w, r)
+	err := controllerManager.XTransmitReq(controllerManager.LocateHostByEngineID, data, w, r)
+	if err != nil {
+		lerr, ok := err.(*manager.LocateError)
+		if ok {
+			http.Error(w, err.Error(), lerr.ErrorStatus)
+			return
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+
 }
 
 func transmitByContainerID(w http.ResponseWriter, r *http.Request) {
@@ -805,7 +816,17 @@ func transmitByContainerID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, vars, w, r)
+	err := controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, vars, w, r)
+	if err != nil {
+		lerr, ok := err.(*manager.LocateError)
+		if ok {
+			http.Error(w, err.Error(), lerr.ErrorStatus)
+			return
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
 }
 
 func transmitByImageName(w http.ResponseWriter, r *http.Request) {
@@ -816,7 +837,17 @@ func transmitByImageName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	controllerManager.XTransmitReq(controllerManager.LocateHostByImgName, vars, w, r)
+	err := controllerManager.XTransmitReq(controllerManager.LocateHostByImgName, vars, w, r)
+	if err != nil {
+		lerr, ok := err.(*manager.LocateError)
+		if ok {
+			http.Error(w, err.Error(), lerr.ErrorStatus)
+			return
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
 }
 
 func xCommit(w http.ResponseWriter, r *http.Request) {
@@ -824,7 +855,14 @@ func xCommit(w http.ResponseWriter, r *http.Request) {
 	containerid := r.FormValue("container")
 	data := map[string]string{"id": containerid}
 
-	controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, data, w, r)
+	err := controllerManager.XTransmitReq(controllerManager.LocateHostByContainerId, data, w, r)
+	if lerr, ok := err.(*manager.LocateError); ok {
+		http.Error(w, err.Error(), lerr.ErrorStatus)
+		return
+	} else {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 }
 
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {

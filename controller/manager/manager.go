@@ -1263,24 +1263,24 @@ type LocateError struct {
 	ErrorStatus int
 }
 
-type AddressLocatedFunc func(map[string]string) (string, LocateError)
-
 func (err *LocateError) Error() string {
-	return msg
+	return err.msg
 }
 
-func newLocateError(_msg string, st int) LocateError {
-	return LocateError{msg: _msg, ErrorStatus: st}
+func newLocateError(_msg string, st int) *LocateError {
+	return &LocateError{msg: _msg, ErrorStatus: st}
 }
 
-func (m *Manager) LocateHostByEngineID(data map[string]string) (string, LocateError) {
+type AddressLocatedFunc func(map[string]string) (string, error)
+
+func (m *Manager) LocateHostByEngineID(data map[string]string) (string, error) {
 	if data["id"] == "" {
 		return "", newLocateError("id 参数缺失", 400)
 	}
 	engineId := data["id"]
 	engine := m.xEngine(engineId)
 	if engine == nil {
-		return "", errors.New("engineid=" + engineId + "对应的engine不存在")
+		return "", newLocateError("engineid="+engineId+"对应的engine不存在", 404)
 	}
 
 	return engine.Engine.Addr, nil
@@ -1288,12 +1288,12 @@ func (m *Manager) LocateHostByEngineID(data map[string]string) (string, LocateEr
 
 func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error) {
 	if data["id"] == "" {
-		return "", errors.New("id 参数缺失")
+		return "", newLocateError("id 参数缺失", 400)
 	}
 	containerid := data["id"]
 	engine := m.xEngineByContainerID(containerid)
 	if engine == nil {
-		return "", errors.New("containerid =" + containerid + "对应的engine不存在")
+		return "", newLocateError("containerid ="+containerid+"对应的engine不存在", 404)
 	}
 
 	return engine.Engine.Addr, nil
@@ -1301,13 +1301,15 @@ func (m *Manager) LocateHostByContainerId(data map[string]string) (string, error
 
 func (m *Manager) LocateHostByImgName(data map[string]string) (string, error) {
 	if data["name"] == "" {
-		return "", errors.New("name 参数缺失")
+		return "", newLocateError("name 参数缺失", 400)
 	}
 	imgname := data["name"]
 	engine := m.ClusterManager().GetEngineByImageName(imgname)
 	if engine == nil {
-		return "", errors.New("当前Engines中不存在任何名称为" + imgname + "的Image")
+		return "", newLocateError("当前Engines中不存在任何名称为"+imgname+"的Image", 404)
 	}
+	fmt.Println("locate by img name ,engine is->")
+	fmt.Println(engine.Addr)
 
 	return engine.Addr, nil
 }
@@ -1324,7 +1326,7 @@ func (m *Manager) XTransmitReq(addressLocatedFunc AddressLocatedFunc, data map[s
 
 func (m *Manager) xTransform(addr string, w http.ResponseWriter, req *http.Request) {
 	fwd, err := forward.New()
-
+	fmt.Println("begin to transmit to", addr)
 	req.URL, err = url.ParseRequestURI(addr)
 
 	if err != nil {
