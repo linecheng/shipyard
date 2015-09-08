@@ -1240,16 +1240,29 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 	var runErr error
 	for i := 0; i < count; i++ {
 		go func(wg *sync.WaitGroup) {
-			container, err := m.ClusterManager().XStart(image, pull)
+			container, engineid, err := m.ClusterManager().XStart(image, pull)
 			if err != nil {
 				runErr = err
 			}
 			launched = append(launched, container)
+			m.xUpdateContainers(&shipyard.DockerContainer{ID: container.Id, Names: []string{image.ContainerName}}, engineid)
 			wg.Done()
 		}(&wg)
 	}
 	wg.Wait()
 	return launched[0], runErr
+}
+
+func (m *Manager) xUpdateContainers(dockerContainer *shipyard.DockerContainer, engineid string) {
+	engs := m.Engines()
+	for _, eng := range engs {
+		if eng.Engine.ID == engineid {
+			eng.Containers = append(eng.Containers, dockerContainer)
+			return
+		}
+	}
+
+	logger.Warn("faile to update containers cache dockercontainer id is " + dockerContainer.ID + " engineid is " + engineid)
 }
 
 func handlerFuncError(msg string, w http.ResponseWriter, r *http.Request) {
