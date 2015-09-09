@@ -20,6 +20,7 @@ import (
 	"github.com/linecheng/shipyard/controller/middleware/access"
 	"github.com/linecheng/shipyard/controller/middleware/auth"
 	"github.com/linecheng/shipyard/dockerhub"
+	"github.com/samalba/dockerclient"
 
 	"github.com/mailgun/oxy/forward"
 	"net/url"
@@ -865,26 +866,31 @@ func xCommit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func xRemoveContainer(w http.ResponseWriter,r *http.Request)  {
+func xRemoveContainer(w http.ResponseWriter, r *http.Request) {
 	data := mux.Vars(r)
-	if len(data)<=0 || data["id"]==""{
-		http.Error(w,"接口id参数不能为空",400)
+	if len(data) <= 0 || data["id"] == "" {
+		http.Error(w, "接口id参数不能为空", 400)
 		return
 	}
 
 	err := controllerManager.XRemoveContainer(data["id"])
 	if err != nil {
-		lerr, ok := err.(*manager.LocateError)
-		if ok {
-			http.Error(w, err.Error(), lerr.ErrorStatus)
+		fmt.Println("remove error")
+		fmt.Println(err)
+		switch value := err.(type) {
+		case *manager.LocateError:
+			http.Error(w, err.Error(), value.ErrorStatus)
 			return
-		} else {
+		case dockerclient.Error:
+			fmt.Println("dockerclient.error!!")
+			http.Error(w, err.Error(), value.StatusCode)
+		default:
+			fmt.Println("default?")
+			fmt.Println(value)
 			http.Error(w, err.Error(), 500)
 			return
 		}
 	}
-
-
 }
 
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {

@@ -1243,6 +1243,8 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 			container, engineid, err := m.ClusterManager().XStart(image, pull)
 			if err != nil {
 				runErr = err
+				wg.Done()
+				return
 			}
 			launched = append(launched, container)
 			m.xUpdateContainers(&shipyard.DockerContainer{ID: container.Id, Names: []string{image.ContainerName}}, engineid)
@@ -1250,6 +1252,11 @@ func (m *Manager) XRun(image *citadel.ContainerConfig, count int, pull bool) (*d
 		}(&wg)
 	}
 	wg.Wait()
+
+	if len(launched) == 0 {
+		return nil, runErr
+	}
+
 	return launched[0], runErr
 }
 
@@ -1360,38 +1367,41 @@ func (m *Manager) XListImages() []*dockerclient.Image {
 	return m.ClusterManager().XListImages()
 }
 
-func (m *Manager) XRemoveContainer(containerid string ) error  {
+func (m *Manager) XRemoveContainer(containerid string) error {
 
 	var err error
 	engine := m.xEngineByContainerID(containerid)
 
-	if err!=nil{
+	if err != nil {
 		return err
 	}
 	client := engine.Engine.GetClient()
-	err =client.RemoveContainer(containerid,false,false)
-	if err!=nil{
-		return nil
+	err = client.RemoveContainer(containerid, false, false)
+	fmt.Println("remove container id is" + containerid)
+
+	if err != nil {
+		fmt.Println(err)
+		return err
 	}
 
 	engs := m.Engines()
 	for _, eng := range engs {
 		if eng.Engine.ID == engine.Engine.ID {
 			fmt.Print()
-			eng.Containers = removeContainers(eng.Containers,containerid)
+			eng.Containers = removeContainers(eng.Containers, containerid)
 			return nil
 		}
 	}
 
-	return  nil
+	return nil
 }
 
-func  removeContainers(source []*shipyard.DockerContainer, continerid string) []*shipyard.DockerContainer {
+func removeContainers(source []*shipyard.DockerContainer, continerid string) []*shipyard.DockerContainer {
 	var res []*shipyard.DockerContainer
 
-	for _,ele := range source{
-		if ele.ID!=continerid{
-			res =append(res,ele)
+	for _, ele := range source {
+		if ele.ID != continerid {
+			res = append(res, ele)
 		}
 	}
 
