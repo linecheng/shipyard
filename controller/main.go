@@ -872,6 +872,17 @@ func xRemoveContainer(w http.ResponseWriter,r *http.Request)  {
 		return
 	}
 
+	err := controllerManager.XRemoveContainer(data["id"])
+	if err != nil {
+		lerr, ok := err.(*manager.LocateError)
+		if ok {
+			http.Error(w, err.Error(), lerr.ErrorStatus)
+			return
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
 
 
 }
@@ -1029,7 +1040,7 @@ func main() {
 	remoteAPIRouter.HandleFunc("/containers/{id}/unpause", transmitByContainerID).Methods("POST")
 	remoteAPIRouter.HandleFunc("/containers/{id}/attach", transmitByContainerID).Methods("POST")
 	remoteAPIRouter.HandleFunc("/containers/{id}/wait", transmitByContainerID).Methods("POST")
-	remoteAPIRouter.HandleFunc("/containers/{id}", transmitByContainerID).Methods("DELETE")
+	remoteAPIRouter.HandleFunc("/containers/{id}", xRemoveContainer).Methods("DELETE")
 	remoteAPIRouter.HandleFunc("/containers/{id}/copy", transmitByContainerID).Methods("POST")
 	remoteAPIRouter.HandleFunc("/containers/{id}/archive", transmitByContainerID).Methods("HEAD")
 	remoteAPIRouter.HandleFunc("/containers/{id}/archive", transmitByContainerID).Methods("GET") //todo
