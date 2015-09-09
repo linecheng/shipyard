@@ -1359,3 +1359,41 @@ func (m *Manager) XListContainers(all bool, size bool, filters string) []*docker
 func (m *Manager) XListImages() []*dockerclient.Image {
 	return m.ClusterManager().XListImages()
 }
+
+func (m *Manager) XRemoveContainer(containerid string ) error  {
+
+	var err error
+	engine := m.xEngineByContainerID(containerid)
+
+	if err!=nil{
+		return err
+	}
+	client := engine.Engine.GetClient()
+	err =client.RemoveContainer(containerid,false,false)
+	if err!=nil{
+		return nil
+	}
+
+	engs := m.Engines()
+	for _, eng := range engs {
+		if eng.Engine.ID == engine.Engine.ID {
+			fmt.Print()
+			eng.Containers = removeContainers(eng.Containers,containerid)
+			return nil
+		}
+	}
+
+	return  nil
+}
+
+func  removeContainers(source []*shipyard.DockerContainer, continerid string) []*shipyard.DockerContainer {
+	var res []*shipyard.DockerContainer
+
+	for _,ele := range source{
+		if ele.ID!=continerid{
+			res =append(res,ele)
+		}
+	}
+
+	return res
+}

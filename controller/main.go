@@ -865,6 +865,17 @@ func xCommit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func xRemoveContainer(w http.ResponseWriter,r *http.Request)  {
+	data := mux.Vars(r)
+	if len(data)<=0 || data["id"]==""{
+		http.Error(w,"接口id参数不能为空",400)
+		return
+	}
+
+
+
+}
+
 func xCreateContainer(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	// p := r.FormValue("pull")
@@ -936,7 +947,8 @@ func main() {
 
 	logger.Infof("shipyard version %s", VERSION)
 	fmt.Println("test print")
-
+	fmt.Println(rethinkdbAddr)
+	fmt.Println(rethinkdbDatabase)
 	controllerManager, mErr = manager.NewManager(rethinkdbAddr, rethinkdbDatabase, rethinkdbAuthKey, VERSION, disableUsageInfo)
 	if mErr != nil {
 		logger.Fatal(mErr)
