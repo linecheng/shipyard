@@ -1190,7 +1190,7 @@ func (m *Manager) xEngineByContainerID(containerID string) *shipyard.Engine {
 		fmt.Println("find engine by container id " + containerID)
 		//fmt.Println(e)
 		for _, c := range e.Containers {
-			fmt.Println(c.ID)
+			//fmt.Println(c.ID)
 			if strings.HasPrefix(c.ID, containerID) {
 				return e
 			}
