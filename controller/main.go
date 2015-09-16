@@ -738,6 +738,7 @@ func xPing(w http.ResponseWriter, r *http.Request) {
 }
 
 func xInspect(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
 
 	if len(vars) == 0 || vars["id"] == "" {
@@ -747,7 +748,21 @@ func xInspect(w http.ResponseWriter, r *http.Request) {
 
 	containerid := vars["id"]
 
-	controllerManager.XInspect(containerid, w, r)
+	info, err := controllerManager.XInspectContainer2(containerid)
+	if err != nil {
+		lerr, ok := err.(*manager.LocateError)
+		if ok {
+			http.Error(w, err.Error(), lerr.ErrorStatus)
+			return
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+
+	json.NewEncoder(w).Encode(info)
+
+	return
 }
 
 func xEvents(w http.ResponseWriter, r *http.Request) {
@@ -1030,7 +1045,7 @@ func main() {
 
 	remoteAPIRouter.HandleFunc("/containers/json", xListContainers)
 	remoteAPIRouter.HandleFunc("/containers/create", xCreateContainer).Methods("POST")
-	remoteAPIRouter.HandleFunc("/containers/{id}/json", transmitByContainerID)
+	remoteAPIRouter.HandleFunc("/containers/{id}/json", xInspect)
 	remoteAPIRouter.HandleFunc("/containers/{id}/top", transmitByContainerID)
 	remoteAPIRouter.HandleFunc("/containers/{id}/logs", transmitByContainerID)
 	remoteAPIRouter.HandleFunc("/containers/{id}/changes", transmitByContainerID)

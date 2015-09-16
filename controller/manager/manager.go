@@ -1407,3 +1407,29 @@ func removeContainers(source []*shipyard.DockerContainer, continerid string) []*
 
 	return res
 }
+
+func (m *Manager) XInspectContainer2(id string) (res *shipyard.ContainerInfo, err error) {
+	engine := m.xEngineByContainerID(id)
+	var containerinfo *dockerclient.ContainerInfo
+	containerinfo, err = engine.Engine.GetClient().InspectContainer(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var addr = engine.Engine.Addr
+	var u, errs = url.Parse(addr)
+	if errs != nil {
+		return nil, errs
+	}
+	host := u.Host
+	if i := strings.Index(u.Host, ":"); i > 0 {
+		host = u.Host[0:i]
+	}
+
+	var enginfo = &shipyard.EngineInfo{Host: host, ID: engine.Engine.ID}
+	res = &shipyard.ContainerInfo{
+		ContainerInfo: *containerinfo, Engine: enginfo,
+	}
+
+	return res, nil
+}
