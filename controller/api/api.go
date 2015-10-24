@@ -144,6 +144,11 @@ func (a *Api) Run() error {
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.consoleSession).Methods("GET")
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.removeConsoleSession).Methods("DELETE")
 
+	apiRouter.HandleFunc("/api/containers/apply", a.applyContainer).Methods("POST")
+	apiRouter.HandleFunc("/api/containers/connect", a.connectContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/status", a.statusContainer).Methods("GET")
+	apiRouter.HandleFunc("/api/containers/abandon", a.abandonContainer).Methods("POST")
+
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
 
