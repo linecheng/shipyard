@@ -23,15 +23,20 @@
         vm.showDestroyContainerDialog = showDestroyContainerDialog;
         vm.showRestartContainerDialog = showRestartContainerDialog;
         vm.showStopContainerDialog = showStopContainerDialog;
+        vm.showPauseContainerDialog = showPauseContainerDialog;
         vm.showScaleContainerDialog = showScaleContainerDialog;
         vm.showRenameContainerDialog = showRenameContainerDialog;
         vm.destroyContainer = destroyContainer;
         vm.stopContainer = stopContainer;
+        vm.pauseContainer = pauseContainer;
+        vm.unpauseContainer = unpauseContainer;
         vm.restartContainer = restartContainer;
         vm.scaleContainer = scaleContainer;
         vm.renameContainer = renameContainer;
         vm.refresh = refresh;
         vm.containerStatusText = containerStatusText;
+		vm.nodeName = nodeName;
+		vm.containerName = containerName;
         vm.checkAll = checkAll;
         vm.clearAll = clearAll;
         vm.destroyAll = destroyAll;
@@ -167,6 +172,11 @@
             $('#stop-modal').modal('show');
         }
 
+        function showPauseContainerDialog(container) {
+            vm.selectedContainerId = container.Id;
+            $("#pause-modal").modal('show');
+        }
+
         function showScaleContainerDialog(container) {
             vm.selectedContainerId = container.Id;
             $('#scale-modal').modal('show');
@@ -188,6 +198,25 @@
 
         function stopContainer() {
             ContainerService.stop(vm.selectedContainerId)
+                .then(function(data) {
+                    vm.refresh();
+                }, function(data) {
+                    vm.error = data;
+                });
+        }
+
+        function pauseContainer() {
+            ContainerService.pause(vm.selectedContainerId)
+                .then(function(data) {
+                    vm.refresh();
+                }, function(data) {
+                    vm.error = data;
+                });
+        }
+
+        function unpauseContainer(container) {
+            vm.selectedContainerId = container.Id;
+            ContainerService.unpause(vm.selectedContainerId)
                 .then(function(data) {
                     vm.refresh();
                 }, function(data) {
@@ -227,6 +256,9 @@
 
         function containerStatusText(container) {
             if(container.Status.indexOf("Up")==0){
+                if (container.Status.indexOf("(Paused)") != -1) {
+                    return "Paused";
+                }
                 return "Running";
             }
             else if(container.Status.indexOf("Exited")==0){
@@ -234,5 +266,36 @@
             }            
             return "Unknown";
         }   
+		
+		function nodeName(container) {
+			// Return only the node name (first component of the shortest container name)
+			var components = shortestContainerName(container).split('/');
+			return components[1];
+		}
+		
+		function containerName(container) {
+			// Remove the node name by returning the last name component of the shortest container name
+			var components = shortestContainerName(container).split('/');
+			return components[components.length-1];
+		}
+		
+		function shortestContainerName(container) {
+			// Distill shortest container name by taking the name with the fewest components
+			// Names with the same number of components are considered in undefined order
+			var shortestName = "";
+			var minComponents = 99;
+			
+			var names = container.Names
+			for(var i=0; i<names.length; i++) {
+				var name = names[i];
+				var numComponents = name.split('/').length
+				if(numComponents < minComponents) {
+					shortestName = name;
+					minComponents = numComponents;
+				}
+			}
+
+			return shortestName;			
+		}
     }
 })();
