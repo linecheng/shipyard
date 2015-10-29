@@ -40,6 +40,7 @@ func CmdServer(c *cli.Context) {
 	tlsCert := c.String("tls-cert")
 	tlsKey := c.String("tls-key")
 	allowInsecure := c.Bool("allow-insecure")
+	registry := c.String("registry")
 
 	client, err := utils.GetClient(dockerUrl, tlsCaCert, tlsCert, tlsKey, allowInsecure)
 	if err != nil {
@@ -74,6 +75,7 @@ func CmdServer(c *cli.Context) {
 		TLSCACertPath:      shipyardTlsCACert,
 		TLSCertPath:        shipyardTlsCert,
 		TLSKeyPath:         shipyardTlsKey,
+		RegistryAddr:       registry,
 	}
 
 	shipyardApi, err := api.NewApi(apiConfig)

@@ -32,6 +32,7 @@ type (
 		tlsKeyPath         string
 		dUrl               string
 		fwd                *forward.Forwarder
+		registryAddr       string
 	}
 
 	ApiConfig struct {
@@ -43,6 +44,7 @@ type (
 		TLSCACertPath      string
 		TLSCertPath        string
 		TLSKeyPath         string
+		RegistryAddr       string
 	}
 
 	Credentials struct {
@@ -67,6 +69,7 @@ func NewApi(config ApiConfig) (*Api, error) {
 		tlsCertPath:        config.TLSCertPath,
 		tlsKeyPath:         config.TLSKeyPath,
 		tlsCACertPath:      config.TLSCACertPath,
+		registryAddr:       config.RegistryAddr,
 	}, nil
 }
 
@@ -144,10 +147,14 @@ func (a *Api) Run() error {
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.consoleSession).Methods("GET")
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.removeConsoleSession).Methods("DELETE")
 
-	apiRouter.HandleFunc("/api/containers/apply", a.applyContainer).Methods("POST")
-	apiRouter.HandleFunc("/api/containers/connect", a.connectContainer).Methods("GET")
-	apiRouter.HandleFunc("/api/containers/status", a.statusContainer).Methods("GET")
-	apiRouter.HandleFunc("/api/containers/abandon", a.abandonContainer).Methods("POST")
+	resourceRouter := mux.NewRouter()
+	resourceRouter.HandleFunc("/resources/apply", a.applyContainer).Methods("POST")
+	resourceRouter.HandleFunc("/resources/{id}/connect", a.connectContainer).Methods("GET")
+	resourceRouter.HandleFunc("/resources/{id}/abandon", a.abandonContainer).Methods("POST")
+	resourceRouter.HandleFunc("/resources/{id}/restart", a.redirectToContainer).Methods("POST")
+	resourceRouter.HandleFunc("/resources/{id}/start", a.redirectToContainer).Methods("POST")
+	resourceRouter.HandleFunc("/resources/{id}/stop", a.redirectToContainer).Methods("POST")
+	resourceRouter.HandleFunc("/resources/{id}/json", a.redirectToContainer).Methods("GET")
 
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
@@ -168,6 +175,15 @@ func (a *Api) Run() error {
 	apiAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
 	apiAuthRouter.UseHandler(apiRouter)
 	globalMux.Handle("/api/", apiAuthRouter)
+
+	resourceAuthRouter := negroni.New()
+	resourceAuthRequired := mAuth.NewAuthRequired(controllerManager, a.authWhitelistCIDRs)
+	resourceAccessRequired := access.NewAccessRequired(controllerManager)
+	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAuthRequired.HandlerFuncWithNext))
+	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAccessRequired.HandlerFuncWithNext))
+	resourceAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
+	resourceAuthRouter.UseHandler(resourceRouter)
+	globalMux.Handle("/resources/", resourceAuthRouter)
 
 	// account router ; protected by auth
 	accountRouter := mux.NewRouter()

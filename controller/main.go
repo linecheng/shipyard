@@ -33,6 +33,12 @@ func main() {
 			Action: commands.CmdServer,
 			Flags: []cli.Flag{
 				cli.StringFlag{
+					Name:   "registry",
+					Value:  "172.16.150.12:5000",
+					Usage:  "local registry address",
+					EnvVar: "REGISTRY_HOST",
+				},
+				cli.StringFlag{
 					Name:  "listen, l",
 					Usage: "listen address",
 					Value: ":8080",
@@ -58,7 +64,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:   "docker, d",
-					Value:  "tcp://127.0.0.1:2375",
+					Value:  "tcp://127.0.0.1:3375",
 					Usage:  "docker swarm addr",
 					EnvVar: "DOCKER_HOST",
 				},

@@ -16,6 +16,7 @@ import (
 	"github.com/samalba/dockerclient"
 	"github.com/shipyard/shipyard"
 	"github.com/shipyard/shipyard/auth"
+	resource "github.com/shipyard/shipyard/containerresourcing"
 	"github.com/shipyard/shipyard/dockerhub"
 	"github.com/shipyard/shipyard/version"
 )
@@ -111,6 +112,11 @@ type (
 		RemoveConsoleSession(c *shipyard.ConsoleSession) error
 		ConsoleSession(token string) (*shipyard.ConsoleSession, error)
 		ValidateConsoleSessionToken(containerId, token string) bool
+
+		//后端资源
+		SaveResource(res *resource.ContainerResource) error
+		UpdateResource(resourceid string, res *resource.ContainerResource) error
+		GetResource(resourceid string) (*resource.ContainerResource, error)
 	}
 )
 
@@ -126,7 +132,7 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 	}
 	log.Info("checking database")
 
-	r.DBCreate(database).Run(session)
+	r.DbCreate(database).Run(session)
 	m := &DefaultManager{
 		database:         database,
 		authKey:          authKey,
@@ -138,6 +144,7 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 		disableUsageInfo: disableUsageInfo,
 	}
 	m.initdb()
+	m.initWebIdeBackendDb()
 	m.init()
 	return m, nil
 }
@@ -160,7 +167,7 @@ func (m DefaultManager) initdb() {
 	for _, tbl := range tables {
 		_, err := r.Table(tbl).Run(m.session)
 		if err != nil {
-			if _, err := r.DB(m.database).TableCreate(tbl).Run(m.session); err != nil {
+			if _, err := r.Db(m.database).TableCreate(tbl).Run(m.session); err != nil {
 				log.Fatalf("error creating table: %s", err)
 			}
 		}

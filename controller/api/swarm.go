@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	log "github.com/Sirupsen/logrus"
 	"net/http"
 	"net/url"
 )
@@ -13,6 +14,7 @@ func (a *Api) swarmRedirect(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	log.Info("begin to redirect ", req.URL, req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
 
