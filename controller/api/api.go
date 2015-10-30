@@ -147,15 +147,6 @@ func (a *Api) Run() error {
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.consoleSession).Methods("GET")
 	apiRouter.HandleFunc("/api/consolesession/{token}", a.removeConsoleSession).Methods("DELETE")
 
-	resourceRouter := mux.NewRouter()
-	resourceRouter.HandleFunc("/resources/apply", a.applyContainer).Methods("POST")
-	resourceRouter.HandleFunc("/resources/{id}/connect", a.connectContainer).Methods("GET")
-	resourceRouter.HandleFunc("/resources/{id}/abandon", a.abandonContainer).Methods("POST")
-	resourceRouter.HandleFunc("/resources/{id}/restart", a.redirectToContainer).Methods("POST")
-	resourceRouter.HandleFunc("/resources/{id}/start", a.redirectToContainer).Methods("POST")
-	resourceRouter.HandleFunc("/resources/{id}/stop", a.redirectToContainer).Methods("POST")
-	resourceRouter.HandleFunc("/resources/{id}/json", a.redirectToContainer).Methods("GET")
-
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
 
@@ -175,15 +166,6 @@ func (a *Api) Run() error {
 	apiAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
 	apiAuthRouter.UseHandler(apiRouter)
 	globalMux.Handle("/api/", apiAuthRouter)
-
-	resourceAuthRouter := negroni.New()
-	resourceAuthRequired := mAuth.NewAuthRequired(controllerManager, a.authWhitelistCIDRs)
-	resourceAccessRequired := access.NewAccessRequired(controllerManager)
-	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAuthRequired.HandlerFuncWithNext))
-	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAccessRequired.HandlerFuncWithNext))
-	resourceAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
-	resourceAuthRouter.UseHandler(resourceRouter)
-	globalMux.Handle("/resources/", resourceAuthRouter)
 
 	// account router ; protected by auth
 	accountRouter := mux.NewRouter()
@@ -212,27 +194,27 @@ func (a *Api) Run() error {
 	// usage with the standard Docker cli
 	m := map[string]map[string]http.HandlerFunc{
 		"GET": {
-			"/_ping":                          swarmRedirect,
-			"/events":                         swarmRedirect,
-			"/info":                           swarmRedirect,
-			"/version":                        swarmRedirect,
-			"/images/json":                    swarmRedirect,
-			"/images/viz":                     swarmRedirect,
-			"/images/search":                  swarmRedirect,
-			"/images/get":                     swarmRedirect,
-			"/images/{name:.*}/get":           swarmRedirect,
-			"/images/{name:.*}/history":       swarmRedirect,
-			"/images/{name:.*}/json":          swarmRedirect,
-			"/containers/ps":                  swarmRedirect,
-			"/containers/json":                swarmRedirect,
-			"/containers/{name:.*}/export":    swarmRedirect,
-			"/containers/{name:.*}/changes":   swarmRedirect,
-			"/containers/{name:.*}/json":      swarmRedirect,
-			"/containers/{name:.*}/top":       swarmRedirect,
-			"/containers/{name:.*}/logs":      swarmRedirect,
-			"/containers/{name:.*}/stats":     swarmRedirect,
-			"/containers/{name:.*}/attach/ws": swarmHijack,
-			"/exec/{execid:.*}/json":          swarmRedirect,
+			"/_ping":                        swarmRedirect,
+			"/events":                       swarmRedirect,
+			"/info":                         swarmRedirect,
+			"/version":                      swarmRedirect,
+			"/images/json":                  swarmRedirect,
+			"/images/viz":                   swarmRedirect,
+			"/images/search":                swarmRedirect,
+			"/images/get":                   swarmRedirect,
+			"/images/{name:.*}/get":         swarmRedirect,
+			"/images/{name:.*}/history":     swarmRedirect,
+			"/images/{name:.*}/json":        swarmRedirect,
+			"/containers/ps":                swarmRedirect,
+			"/containers/json":              swarmRedirect,
+			"/containers/{name:.*}/export":  a.redirectToContainer,
+			"/containers/{name:.*}/changes": a.redirectToContainer,
+			"/containers/{name:.*}/json":    a.inspectResource, //swarmRedirect,//连接到这个container，返回容器的详细信息
+			"/containers/{name:.*}/top":     a.redirectToContainer,
+			"/containers/{name:.*}/logs":    a.redirectToContainer,
+			"/containers/{name:.*}/stats":   a.redirectToContainer,
+			//"/containers/{name:.*}/attach/ws": swarmHijack,
+			"/exec/{execid:.*}/json": swarmRedirect,
 		},
 		"POST": {
 			"/auth":                         swarmRedirect,
@@ -242,21 +224,21 @@ func (a *Api) Run() error {
 			"/images/load":                  swarmRedirect,
 			"/images/{name:.*}/push":        swarmRedirect,
 			"/images/{name:.*}/tag":         swarmRedirect,
-			"/containers/create":            swarmRedirect,
-			"/containers/{name:.*}/kill":    swarmRedirect,
-			"/containers/{name:.*}/pause":   swarmRedirect,
-			"/containers/{name:.*}/unpause": swarmRedirect,
-			"/containers/{name:.*}/rename":  swarmRedirect,
-			"/containers/{name:.*}/restart": swarmRedirect,
-			"/containers/{name:.*}/start":   swarmRedirect,
-			"/containers/{name:.*}/stop":    swarmRedirect,
-			"/containers/{name:.*}/wait":    swarmRedirect,
-			"/containers/{name:.*}/resize":  swarmRedirect,
-			"/containers/{name:.*}/attach":  swarmHijack,
-			"/containers/{name:.*}/copy":    swarmRedirect,
-			"/containers/{name:.*}/exec":    swarmRedirect,
-			"/exec/{execid:.*}/start":       swarmHijack,
-			"/exec/{execid:.*}/resize":      swarmRedirect,
+			"/containers/create":            a.createResource, //swarmRedirect,
+			"/containers/{name:.*}/kill":    a.redirectToContainer,
+			"/containers/{name:.*}/pause":   a.redirectToContainer,
+			"/containers/{name:.*}/unpause": a.redirectToContainer,
+			"/containers/{name:.*}/rename":  a.redirectToContainer,
+			"/containers/{name:.*}/restart": a.redirectToContainer,
+			"/containers/{name:.*}/start":   a.startResource,
+			"/containers/{name:.*}/stop":    a.redirectToContainer,
+			"/containers/{name:.*}/wait":    a.redirectToContainer,
+			"/containers/{name:.*}/resize":  a.redirectToContainer,
+			// "/containers/{name:.*}/attach":  swarmHijack,
+			"/containers/{name:.*}/copy": a.redirectToContainer,
+			"/containers/{name:.*}/exec": a.redirectToContainer,
+			"/exec/{execid:.*}/start":    swarmHijack,
+			"/exec/{execid:.*}/resize":   swarmRedirect,
 		},
 		"DELETE": {
 			"/containers/{name:.*}": swarmRedirect,

@@ -13,7 +13,7 @@ const (
 )
 
 type ContainerResource struct {
-	ID             string
+	ResourceID     string
 	ContainerID    string
 	Status         string
 	Image          string

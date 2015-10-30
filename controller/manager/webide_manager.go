@@ -34,18 +34,23 @@ func (m DefaultManager) SaveResource(res *resource.ContainerResource) error {
 }
 func (m DefaultManager) UpdateResource(resourceid string, res *resource.ContainerResource) error {
 	log.Infoln("开始更新资源：ResourceID=" + resourceid)
-	_, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ID": resourceid}).Update(res).RunWrite(m.session)
+	_, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Update(res).RunWrite(m.session)
 	if err != nil {
 		return errors.New("resourceid = " + resourceid + err.Error())
 	}
 	return nil
 }
 func (m DefaultManager) GetResource(resourceid string) (*resource.ContainerResource, error) {
-	res, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ID": resourceid}).Run(m.session)
+	res, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Run(m.session)
 	if err != nil {
 		return nil, err
 	}
 	var cr resource.ContainerResource
+
+	if res.IsNil() {
+		return nil, nil
+	}
+
 	if err = res.One(&cr); err != nil {
 		return nil, err
 	}
