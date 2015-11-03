@@ -33,6 +33,7 @@ type (
 		dUrl               string
 		fwd                *forward.Forwarder
 		registryAddr       string
+		waitMovingTimeout  int
 	}
 
 	ApiConfig struct {
@@ -44,7 +45,9 @@ type (
 		TLSCACertPath      string
 		TLSCertPath        string
 		TLSKeyPath         string
-		RegistryAddr       string
+
+		RegistryAddr      string
+		WaitMovingTimeout int //以秒为单位
 	}
 
 	Credentials struct {
@@ -70,6 +73,7 @@ func NewApi(config ApiConfig) (*Api, error) {
 		tlsKeyPath:         config.TLSKeyPath,
 		tlsCACertPath:      config.TLSCACertPath,
 		registryAddr:       config.RegistryAddr,
+		waitMovingTimeout:  config.WaitMovingTimeout,
 	}, nil
 }
 

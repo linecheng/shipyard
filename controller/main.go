@@ -38,6 +38,11 @@ func main() {
 					Usage:  "local registry address",
 					EnvVar: "REGISTRY_HOST",
 				},
+				cli.IntFlag{
+					Name:  "wait-moving-timeout", //s
+					Value: 1200,                  //20 min,
+					Usage: "timeout to  wait container moving  ",
+				},
 				cli.StringFlag{
 					Name:  "listen, l",
 					Usage: "listen address",

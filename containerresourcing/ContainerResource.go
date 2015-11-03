@@ -2,6 +2,7 @@ package containerresourcing
 
 import (
 	_ "fmt"
+	"github.com/samalba/dockerclient"
 	"time"
 )
 
@@ -19,4 +20,5 @@ type ContainerResource struct {
 	Image          string
 	LastUpdateTime time.Time
 	CreateTime     time.Time
+	CreatingConfig *dockerclient.ContainerConfig
 }

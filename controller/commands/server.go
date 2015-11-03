@@ -17,6 +17,7 @@ var (
 
 func CmdServer(c *cli.Context) {
 	rethinkdbAddr := c.String("rethinkdb-addr")
+	waitMovingTimeout := c.Int("wait-moving-timeout")
 	rethinkdbDatabase := c.String("rethinkdb-database")
 	rethinkdbAuthKey := c.String("rethinkdb-auth-key")
 	disableUsageInfo := c.Bool("disable-usage-info")
@@ -76,6 +77,7 @@ func CmdServer(c *cli.Context) {
 		TLSCertPath:        shipyardTlsCert,
 		TLSKeyPath:         shipyardTlsKey,
 		RegistryAddr:       registry,
+		WaitMovingTimeout:  waitMovingTimeout,
 	}
 
 	shipyardApi, err := api.NewApi(apiConfig)

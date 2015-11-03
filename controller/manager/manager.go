@@ -117,6 +117,7 @@ type (
 		SaveResource(res *resource.ContainerResource) error
 		UpdateResource(resourceid string, res *resource.ContainerResource) error
 		GetResource(resourceid string) (*resource.ContainerResource, error)
+		WaitUntilResourceAvaiable(resourceID string, timeout time.Duration, c_done chan map[string]string)
 	}
 )
 

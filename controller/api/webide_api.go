@@ -94,7 +94,8 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var resource = &resourcing.ContainerResource{
-		ResourceID: utils.NewGuid(), Status: resourcing.Avaiable, ContainerID: containerid, CreateTime: time.Now().Local(), LastUpdateTime: time.Now().Local(), Image: "",
+		ResourceID: utils.NewGuid(), Status: resourcing.Avaiable, ContainerID: containerid, CreateTime: time.Now().Local(),
+		LastUpdateTime: time.Now().Local(), Image: "", CreatingConfig: config,
 	}
 	if err := a.manager.SaveResource(resource); err != nil {
 		var msg = fmt.Sprintf("资源id= %s, Status =%s , ContainerID=%s  数据库写入失败", resource.ResourceID, resource.Status, resource.ContainerID)
@@ -188,8 +189,9 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 // 相对原生api ，多了1个423 资源锁定的状态。同时会返回status字段值为moving.
 func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
+	var resourceID = data["name"]
 
-	log.Infoln("connect container ,resource id is " + data["name"])
+	log.Infoln("start container ,resource id is " + data["name"])
 
 	var resource, err = a.manager.GetResource(data["name"])
 	if err != nil {
@@ -219,7 +221,7 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	if resource.Status == resourcing.Image {
 		log.Infof("资源%s状态为%s", resource.ResourceID, resource.Status)
 		//根据imagename创建容器
-		containerid, err := a._createContainerByImage(swarm, resource.Image)
+		containerid, err := a._createContainerByImage(swarm, resource.Image, resource.CreatingConfig)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -245,16 +247,21 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if resource.Status == resourcing.Moving {
-		log.Infof("资源%s状态为%s,无法正常启动", resource.ResourceID, resource.Status)
-		var data = map[string]string{"status": resource.Status, "description": "资源对应容器正在移动中，已被锁定，请稍后再试"}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(423) //Locked 当前资源已被锁定
 
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Infof("资源%s状态为%s, 持续查询中", resource.ResourceID, resource.Status)
+		c_done := make(chan map[string]string)
+		go a.manager.WaitUntilResourceAvaiable(resourceID, (time.Duration(a.waitMovingTimeout) * time.Second), c_done)
+		done := <-c_done
+		if done["done"] != "true" {
+			log.Infof("资源%s等待movint->avaiable超时", resource.ResourceID)
+			http.Error(w, "资源处于Moving中，等待超 时 :"+done["error"], http.StatusInternalServerError)
+			return
+		} else {
+			log.Infof("资源%s状态已为avaiable, ContainerID = ", done["containerID"])
+			a._redirectToStartContainer(done["containerID"], w, req)
 			return
 		}
-		return
+
 	}
 
 	var msg = fmt.Sprintf("%s对应的Resource Status字段值%s有误", resource.ResourceID, resource.Status)
@@ -278,14 +285,14 @@ func (a *Api) _redirectToStartContainer(containerID string, w http.ResponseWrite
 	}
 
 	req.RequestURI = strings.Join(segments, "/")
-	log.Infoln("转发至" + req.URL.String() + req.RequestURI + "启动container")
+	log.Debugln("转发至" + req.URL.String() + req.RequestURI + "启动container")
 	a.fwd.ServeHTTP(w, req)
 }
 
 func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
-	log.Infoln("开始转发对" + req.RequestURI + "请求")
+	log.Debugln("开始转发对" + req.RequestURI + "请求")
 	var resource, err = a.manager.GetResource(resourceid)
 	if err != nil {
 		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusNotFound)
@@ -403,17 +410,23 @@ func (a *Api) appendLocalRegistryToImageName(imageName string) (string, error) {
 	return prefix + "/" + imageName, nil
 }
 
-func (a *Api) _createContainerByImage(swarm *swarmclient.SwarmClient, imageName string) (string, error) {
+func (a *Api) _createContainerByImage(swarm *swarmclient.SwarmClient, imageName string, creatingConfig *dockerclient.ContainerConfig) (string, error) {
 	//	var image, err = a.appendLocalRegistryToImageName(imageName) // 172.16.150.12:5000/nndtdx/workspaceName:commitid
 	//	if err != nil {
 	//		return "", nil
 	//	}
-	var image = imageName
-	var config = &dockerclient.ContainerConfig{
-		Image: image,
-	}
-	log.Infoln("开始从镜像" + image + "创建Container")
-	containerid, err := swarm.CreateContainer(config, "") //先在本地找，然后会根据指定的 ImageFullName 来在相应的Registry中Pul
+	//	var image = imageName
+	//	var config = &dockerclient.ContainerConfig{
+	//		Image: image,
+	//	}
+	log.Debugln("creatingconfig-->")
+	log.Debugln(creatingConfig)
+
+	creatingConfig.Image = imageName
+
+	log.Infoln("开始从镜像" + imageName + "创建Container")
+	log.Debugln("create container by image , config->  :", creatingConfig)
+	containerid, err := swarm.CreateContainer(creatingConfig, "") //先在本地找，然后会根据指定的 ImageFullName 来在相应的Registry中Pul
 	if err != nil {
 		return "", err
 	}

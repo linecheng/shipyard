@@ -2,10 +2,12 @@ package manager
 
 import (
 	"errors"
+	"fmt"
 	_ "fmt"
 	log "github.com/Sirupsen/logrus"
 	r "github.com/dancannon/gorethink"
 	resource "github.com/shipyard/shipyard/containerresourcing"
+	"time"
 )
 
 const (
@@ -56,4 +58,43 @@ func (m DefaultManager) GetResource(resourceid string) (*resource.ContainerResou
 	}
 
 	return &cr, nil
+}
+
+func (m DefaultManager) WaitUntilResourceAvaiable(resourceID string, timeout time.Duration, c_done chan map[string]string) {
+	var done = map[string]string{
+		"done":  "false",
+		"error": "",
+	}
+	var begin = time.Now()
+	log.Infof("开始等待资源%s由Moving转为可用状态,%ds秒后超时", resourceID, timeout/time.Second)
+
+	for {
+		if time.Now().Sub(begin) > timeout {
+			done["error"] = fmt.Sprintf("资源 %s  查询超时，结束查询", resourceID)
+			log.Infof(done["error"])
+			c_done <- done
+			return
+		}
+
+		var res, err = r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceID}).Run(m.session)
+		if err != nil {
+			done["error"] = err.Error()
+			c_done <- done
+			return
+		}
+
+		var data map[string]interface{}
+		res.One(&data)
+		log.Infof("%d s:  资源%v  状态为->%v", time.Now().Sub(begin)/time.Second, resourceID, data["Status"])
+
+		if data["Status"] == "avaiable" {
+			log.Infof("资源%v 已可用，查询结束 ", resourceID)
+			done["done"] = "true"
+			done["containerID"] = fmt.Sprint(data["ContainerID"])
+			c_done <- done
+			return
+		}
+
+		time.Sleep(5 * time.Second)
+	}
 }
