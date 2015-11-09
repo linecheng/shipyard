@@ -299,7 +299,7 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if resource == nil {
-		http.Error(w, "资源id="+resourceid+"对应记录不存在"+err.Error(), http.StatusNotFound)
+		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
 		return
 	}
 

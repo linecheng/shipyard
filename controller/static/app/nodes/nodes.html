@@ -43,8 +43,11 @@
                     <th>Name</th>
                     <th>Address</th>
                     <th>Containers</th>
+	     <th>Containers Total and Start</th>
                     <th>Reserved CPUs</th>
                     <th>Reserved Memory</th>
+	    <th>Reserved CPUs Only Start</th>
+                    <th>Reserved Memory Only Start</th>
                     <th>Labels</th>
                 </tr>
             </thead>
@@ -53,8 +56,11 @@
                     <td>{{n.name}}</td>
                     <td>{{n.addr}}</td>
                     <td>{{n.containers}}</td>
+	    <td>{{n.containers_total_start}}</td>
                     <td>{{n.reserved_cpus}}</td>
                     <td>{{n.reserved_memory}}</td>
+	     <td>{{n.reserved_cpus_onlystart}}</td>
+                    <td>{{n.reserved_memory_onlystart}}</td>
                     <td>{{n.labels.join(', ')}}</td>
                 </tr>
             </tbody>

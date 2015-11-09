@@ -43,8 +43,11 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 	name := ""
 	addr := ""
 	containers := ""
+	containersTotalAndStart := ""
 	reservedCPUs := ""
 	reservedMemory := ""
+	reservedCPUsOnlyStart := ""
+	reservedMemoryOnlyStart := ""
 	labels := []string{}
 	for _, l := range driverStatus {
 		if len(l) != 2 {
@@ -67,6 +70,8 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 		switch label {
 		case " └ Containers":
 			containers = data
+		case " └ Containers Total And Start":
+			containersTotalAndStart = data
 		case " └ Reserved CPUs":
 			reservedCPUs = data
 		case " └ Reserved Memory":
@@ -75,18 +80,25 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 			lbls := strings.Split(data, ",")
 			labels = lbls
 			nodeComplete = true
+		case " └ Reserved  CPUs Only Start":
+			reservedCPUsOnlyStart = data
+		case " └ Reserved Memory Only Start":
+			reservedMemoryOnlyStart = data
 		default:
 			continue
 		}
 
 		if nodeComplete {
 			node = &shipyard.Node{
-				Name:           name,
-				Addr:           addr,
-				Containers:     containers,
-				ReservedCPUs:   reservedCPUs,
-				ReservedMemory: reservedMemory,
-				Labels:         labels,
+				Name:                    name,
+				Addr:                    addr,
+				Containers:              containers,
+				ContainersTotalAndStart: containersTotalAndStart,
+				ReservedCPUs:            reservedCPUs,
+				ReservedMemory:          reservedMemory,
+				ReservedCPUsOnlyStart:   reservedCPUsOnlyStart,
+				ReservedMemoryOnlyStart: reservedMemoryOnlyStart,
+				Labels:                  labels,
 			}
 			nodes = append(nodes, node)
 
