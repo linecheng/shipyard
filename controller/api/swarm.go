@@ -5,6 +5,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 func (a *Api) swarmRedirect(w http.ResponseWriter, req *http.Request) {
@@ -14,6 +15,7 @@ func (a *Api) swarmRedirect(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	req.RequestURI = strings.TrimPrefix(req.RequestURI, "/origin")
 	log.Info("begin to redirect ", req.URL, req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }

@@ -192,10 +192,95 @@ func (a *Api) Run() error {
 	hubRouter.HandleFunc("/hub/webhook/{id}", a.hubWebhook).Methods("POST")
 	globalMux.Handle("/hub/", hubRouter)
 
-	// swarm
-	swarmRouter := mux.NewRouter()
+	var originRouter = mux.NewRouter()
+	var prefix = "/origin"
 	// these are pulled from the swarm api code to proxy and allow
 	// usage with the standard Docker cli
+	oriMap := map[string]map[string]http.HandlerFunc{
+		"GET": {
+			"/_ping":                          swarmRedirect,
+			"/events":                         swarmRedirect,
+			"/info":                           swarmRedirect,
+			"/version":                        swarmRedirect,
+			"/images/json":                    swarmRedirect,
+			"/images/viz":                     swarmRedirect,
+			"/images/search":                  swarmRedirect,
+			"/images/get":                     swarmRedirect,
+			"/images/{name:.*}/get":           swarmRedirect,
+			"/images/{name:.*}/history":       swarmRedirect,
+			"/images/{name:.*}/json":          swarmRedirect,
+			"/containers/ps":                  swarmRedirect,
+			"/containers/json":                swarmRedirect,
+			"/containers/{name:.*}/export":    swarmRedirect,
+			"/containers/{name:.*}/changes":   swarmRedirect,
+			"/containers/{name:.*}/json":      swarmRedirect, //swarmRedirect,//连接到这个container，返回容器的详细信息
+			"/containers/{name:.*}/top":       swarmRedirect,
+			"/containers/{name:.*}/logs":      swarmRedirect,
+			"/containers/{name:.*}/stats":     swarmRedirect,
+			"/containers/{name:.*}/attach/ws": swarmHijack,
+			"/exec/{execid:.*}/json":          swarmRedirect,
+		},
+		"POST": {
+			"/auth":                         swarmRedirect,
+			"/commit":                       swarmRedirect,
+			"/build":                        swarmRedirect,
+			"/images/create":                swarmRedirect,
+			"/images/load":                  swarmRedirect,
+			"/images/{name:.*}/push":        swarmRedirect,
+			"/images/{name:.*}/tag":         swarmRedirect,
+			"/containers/create":            swarmRedirect, //swarmRedirect,
+			"/containers/{name:.*}/kill":    swarmRedirect,
+			"/containers/{name:.*}/pause":   swarmRedirect,
+			"/containers/{name:.*}/unpause": swarmRedirect,
+			"/containers/{name:.*}/rename":  swarmRedirect,
+			"/containers/{name:.*}/restart": swarmRedirect,
+			"/containers/{name:.*}/start":   swarmRedirect,
+			"/containers/{name:.*}/stop":    swarmRedirect,
+			"/containers/{name:.*}/wait":    swarmRedirect,
+			"/containers/{name:.*}/resize":  swarmRedirect,
+			"/containers/{name:.*}/attach":  swarmHijack,
+			"/containers/{name:.*}/copy":    swarmRedirect,
+			"/containers/{name:.*}/exec":    swarmRedirect,
+			"/exec/{execid:.*}/start":       swarmHijack,
+			"/exec/{execid:.*}/resize":      swarmRedirect,
+		},
+		"DELETE": {
+			"/containers/{name:.*}": swarmRedirect,
+			"/images/{name:.*}":     swarmRedirect,
+		},
+		"OPTIONS": {
+			"": swarmRedirect,
+		},
+	}
+
+	for method, routes := range oriMap {
+		for route, fct := range routes {
+			localRoute := route
+			localFct := fct
+			wrap := func(w http.ResponseWriter, r *http.Request) {
+				if a.enableCors {
+					writeCorsHeaders(w, r)
+				}
+				localFct(w, r)
+			}
+			localMethod := method
+
+			// add the new route
+			originRouter.Path(prefix + "/v{version:[0-9.]+}" + localRoute).Methods(localMethod).HandlerFunc(wrap)
+			originRouter.Path(prefix + localRoute).Methods(localMethod).HandlerFunc(wrap)
+		}
+	}
+	originAuthRouter := negroni.New()
+	originAuthRequired := mAuth.NewAuthRequired(controllerManager, a.authWhitelistCIDRs)
+	originAccessRequired := access.NewAccessRequired(controllerManager)
+	originAuthRouter.Use(negroni.HandlerFunc(originAuthRequired.HandlerFuncWithNext))
+	originAuthRouter.Use(negroni.HandlerFunc(originAccessRequired.HandlerFuncWithNext))
+	originAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
+	originAuthRouter.UseHandler(originRouter)
+	globalMux.Handle(prefix+"/", originAuthRouter)
+
+	// swarm
+	resourcingRouter := mux.NewRouter()
 	m := map[string]map[string]http.HandlerFunc{
 		"GET": {
 			"/_ping":                        swarmRedirect,
@@ -266,8 +351,8 @@ func (a *Api) Run() error {
 			localMethod := method
 
 			// add the new route
-			swarmRouter.Path("/v{version:[0-9.]+}" + localRoute).Methods(localMethod).HandlerFunc(wrap)
-			swarmRouter.Path(localRoute).Methods(localMethod).HandlerFunc(wrap)
+			resourcingRouter.Path("/v{version:[0-9.]+}" + localRoute).Methods(localMethod).HandlerFunc(wrap)
+			resourcingRouter.Path(localRoute).Methods(localMethod).HandlerFunc(wrap)
 		}
 	}
 
@@ -277,7 +362,7 @@ func (a *Api) Run() error {
 	swarmAuthRouter.Use(negroni.HandlerFunc(swarmAuthRequired.HandlerFuncWithNext))
 	swarmAuthRouter.Use(negroni.HandlerFunc(swarmAccessRequired.HandlerFuncWithNext))
 	swarmAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
-	swarmAuthRouter.UseHandler(swarmRouter)
+	swarmAuthRouter.UseHandler(resourcingRouter)
 	globalMux.Handle("/containers/", swarmAuthRouter)
 	globalMux.Handle("/_ping", swarmAuthRouter)
 	globalMux.Handle("/commit", swarmAuthRouter)
