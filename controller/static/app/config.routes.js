@@ -11,7 +11,9 @@
         $stateProvider
             .state('error', {
                 templateUrl: 'app/error/error.html',
-                authenticate: false
+                authenticate: false,
+	//controller: 'ErrorController',
+                //controllerAs: 'vm',
             });
         $urlRouterProvider.otherwise(function ($injector) {
             var $state = $injector.get('$state');

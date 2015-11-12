@@ -1,0 +1,158 @@
+<div id="delete-modal" class="ui small modal transition">
+<i class="close icon"></i>
+<div class="header">
+    Delete Resource In DB: {{ vm.selectedResourceId | limitTo:12 }}
+</div>
+<div class="content">
+    <p>仅删除数据库中的记录,你需要手动删除对应的容器!!!!!!!!</p>
+</div>
+<div class="actions">
+    <div class="ui negative button">
+        No
+    </div>
+    <div ng-click="vm.deleteResource()" class="ui positive right labeled icon button">
+        Yes
+        <i class="checkmark icon"></i>
+    </div>
+</div>
+</div>
+
+<div class="ui padded grid">
+    <div class="two column row">
+        <div class="left floated column">
+            <div ng-click="vm.refresh()" class="ui small blue labeled icon button">
+                <i class="refresh icon"></i> Refresh
+            </div>
+        </div>
+
+        <div class="right aligned right floated column">
+            <div class="ui small icon input">
+                <input ng-model="tableFilter" placeholder="Search Resources..." reset-field/>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" ng-show="vm.error">
+        <div class="sixteen wide column">
+            <div class="ui error message">
+                <div class="header">Error...</div>
+                <p>{{vm.error}}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" ng-show="vm.errors.length > 0">
+        <div class="sixteen wide column">
+            <div class="ui error message">
+                <div class="header">Error...</div>
+                <p ng-repeat="e in vm.errors">{{e}}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" ng-show="vm.resources.length === 0">
+        <div class="column">
+            <div class="ui icon message">
+                <i class="info icon"></i>
+                <div class="content">
+                    <div class="header">
+                        Resources
+                    </div>
+                    <p>There are no resources.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" ng-show="filteredResources.length > 0">
+        <div class="column">
+            <table class="ui sortable celled table">
+                <thead>
+                    <tr>
+                        <th id="select-all-table-header" class="collapsing">
+                            <div class="ui fitted checkbox" ng-click="vm.checkAll()">
+                                <input type="checkbox" id="all-cb" ng-model="vm.selectedAll">
+                                <label for="all-cb"></label>
+                            </div>
+                        </th>
+                        <th id="container-health-table-header" class="collapsing"><i class="heartbeat icon"></i></th>
+                        <th class="collapsing">ResourceId</th>
+                        <th>ContainerID</th>
+                        <th>Resource Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr ng-class="{'active': vm.selected[c.ResourceID].Selected}" ng-repeat="c in filteredResources = (vm.resources | filter:tableFilter)" jquery>
+                        <td class="collapsing">
+                            <div class="positive ui fitted checkbox">
+                                <input type="checkbox" id="{{$index}}-cb" ng-model="vm.selected[c.ResourceID].Selected">
+                                <label for="{{$index}}-cb"></label>
+                            </div>
+                        </td>
+                        <td>
+                           <!-- <i class="circle icon" ng-class="vm.resourceStatusText(c) == 'Running' ? 'green' : vm.resourceStatusText(c) == 'Paused' ? 'yellow' : 'red'"></i>
+                            <span class="hidden">{{vm.resourceStatusText(c)}}</span>-->
+                        </td>
+                        <td>{{c.ResourceID | limitTo:12 }}</td>
+                        <td ui-sref="dashboard.inspect({id: c.ContainerID})"  ><a style="cursor: pointer;">{{c.ContainerID | limitTo:12  }}</a></td>
+                        <td>{{c.Status}}</td> 
+                        <td class="collapsing">
+                            <div ui-sref="dashboard.inspect({id: c.ResourceID})" class="basic compact blue ui icon button">
+                                <i class="search icon"></i>
+                            </div>
+                            <div class="ui right pointing dropdown">
+                                <div class="basic compact blue ui icon button">
+                                    <i class="wrench icon"></i>
+                                </div>
+                                <div class="menu">
+                                    <a ng-click="vm.showDeleteResourceDialog(c)" class="item"><i class="red remove icon"></i> Delete</a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row" ng-show="vm.resources.length > 0 && filteredResources.length === 0">
+        <div class="column">
+            <div class="ui icon message">
+                <i class="info icon"></i>
+                <div class="content">
+                    <div class="header">
+                        Containers
+                    </div>
+                    <p>No containers matched your filter query</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="multi-action-menu" class="ui bottom horizontal inverted labeled icon overlay sidebar menu" ng-class="{'visible': vm.selectedItemCount > 0}">
+    <a class="header item">
+        <i class="grid layout icon"></i>{{ vm.selectedItemCount }} Selected
+    </a>
+    <a class="item" ng-click="vm.clearAll()">
+        <i class="ban icon"></i>
+        Clear 
+    </a>
+    <a class="item" ng-click="vm.restartAll()">
+        <i class="refresh icon"></i>
+        Restart 
+    </a>
+    <a class="item" ng-click="vm.stopAll()">
+        <i class="stop icon"></i>
+        Stop 
+    </a>
+    <a class="item" ng-click="vm.destroyAll()">
+        <i class="delete icon"></i>
+        Destroy 
+    </a>
+</div>
+
+<script>
+$('.ui.dropdown').dropdown();
+</script>

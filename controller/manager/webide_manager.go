@@ -17,11 +17,11 @@ const (
 
 func (m DefaultManager) initWebIdeBackendDb() {
 	log.Info("begin to init webdie backend db")
-	r.DbCreate(db_webide_backend).Run(m.session)
+	r.DbCreate(db_webide_backend).Run(m.idesession)
 	var db = r.Db(db_webide_backend)
-	_, err := db.Table(table_resource).Run(m.session)
+	_, err := db.Table(table_resource).Run(m.idesession)
 	if err != nil {
-		if _, err := db.TableCreate(table_resource).Run(m.session); err != nil {
+		if _, err := db.TableCreate(table_resource).Run(m.idesession); err != nil {
 			log.Fatalf("error creating table: %s", err)
 			return
 		}
@@ -31,19 +31,80 @@ func (m DefaultManager) initWebIdeBackendDb() {
 }
 
 func (m DefaultManager) SaveResource(res *resource.ContainerResource) error {
-	_, err := r.Db(db_webide_backend).Table(table_resource).Insert(res).RunWrite(m.session)
+	_, err := r.Db(db_webide_backend).Table(table_resource).Insert(res).RunWrite(m.idesession)
+
 	return err
 }
 func (m DefaultManager) UpdateResource(resourceid string, res *resource.ContainerResource) error {
 	log.Infoln("开始更新资源：ResourceID=" + resourceid)
-	_, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Update(res).RunWrite(m.session)
+	_, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Update(res).RunWrite(m.idesession)
 	if err != nil {
 		return errors.New("resourceid = " + resourceid + err.Error())
 	}
 	return nil
 }
+
+func (m DefaultManager) ResourceList() (*[]resource.ContainerResource, error) {
+	res, err := r.Db(db_webide_backend).Table(table_resource).Run(m.idesession)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var array []resource.ContainerResource
+	if res.IsNil() {
+		return nil, nil
+	}
+
+	if res.All(&array); err != nil {
+		return nil, err
+	}
+	return &array, nil
+}
+
+func (m DefaultManager) DeleteResource(resourceId string) error {
+	var res *r.Cursor
+	var err error
+	res, err = r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceId}).Run(m.idesession)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	if res.IsNil() {
+		return nil
+	}
+
+	resp, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceId}).Delete().RunWrite(m.idesession)
+	if err != nil {
+		return err
+	}
+
+	if resp.Deleted >= 1 {
+		return nil
+	} else {
+		return errors.New("no to delete")
+	}
+}
+
 func (m DefaultManager) GetResource(resourceid string) (*resource.ContainerResource, error) {
-	res, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Run(m.session)
+	res, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Run(m.idesession)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +128,12 @@ func (m DefaultManager) WaitUntilResourceAvaiable(resourceID string, timeout tim
 	}
 	var begin = time.Now()
 	log.Infof("开始等待资源%s由Moving转为可用状态,%ds秒后超时", resourceID, timeout/time.Second)
+	var res *r.Cursor
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 
 	for {
 		if time.Now().Sub(begin) > timeout {
@@ -76,7 +143,7 @@ func (m DefaultManager) WaitUntilResourceAvaiable(resourceID string, timeout tim
 			return
 		}
 
-		var res, err = r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceID}).Run(m.session)
+		var res, err = r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceID}).Run(m.idesession)
 		if err != nil {
 			done["error"] = err.Error()
 			c_done <- done

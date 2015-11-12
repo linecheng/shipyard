@@ -36,7 +36,7 @@ func (a *AuthRequired) Handler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := a.handleRequest(w, r)
 		if err != nil {
-			logger.Warnf("unauthorized request for %s from %s", r.URL.Path, r.RemoteAddr)
+			logger.Warnf("unauthorized request for %s from %s , error = %s", r.URL.Path, r.RemoteAddr, err.Error())
 			return
 		}
 		h.ServeHTTP(w, r)
@@ -77,6 +77,8 @@ func (a *AuthRequired) handleRequest(w http.ResponseWriter, r *http.Request) err
 	valid := false
 	// service key takes priority
 	serviceKey := r.Header.Get("X-Service-Key")
+	logger.Infoln("X-Service-Key = ", serviceKey)
+	logger.Infoln("header is ->", r.Header)
 	if serviceKey != "" {
 		if err := a.manager.VerifyServiceKey(serviceKey); err == nil {
 			valid = true
@@ -108,9 +110,8 @@ func (a *AuthRequired) handleRequest(w http.ResponseWriter, r *http.Request) err
 
 func (a *AuthRequired) HandlerFuncWithNext(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	err := a.handleRequest(w, r)
-
 	if err != nil {
-		logger.Warnf("unauthorized request for %s from %s", r.URL.Path, r.RemoteAddr)
+		logger.Warnf("!!!!!!!!!!!!unauthorized request for %s from %s , error ->  %s", r.URL.Path, r.RemoteAddr, err.Error())
 		return
 	}
 

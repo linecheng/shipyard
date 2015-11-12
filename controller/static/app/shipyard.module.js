@@ -10,6 +10,7 @@
                 'shipyard.help',
                 'shipyard.login',
                 'shipyard.containers',
+	'shipyard.resources',
                 'shipyard.events',
                 'shipyard.registry',
                 'shipyard.nodes',

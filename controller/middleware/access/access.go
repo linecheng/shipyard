@@ -38,7 +38,7 @@ func (a *AccessRequired) Handler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := a.handleRequest(w, r)
 		if err != nil {
-			logger.Warnf("unauthorized request for %s from %s", r.URL.Path, r.RemoteAddr)
+			logger.Warnf("unauthorized request for %s from %s ,error = %s ", r.URL.Path, r.RemoteAddr, err.Error())
 			return
 		}
 		h.ServeHTTP(w, r)
@@ -48,6 +48,7 @@ func (a *AccessRequired) Handler(h http.Handler) http.Handler {
 func (a *AccessRequired) handleRequest(w http.ResponseWriter, r *http.Request) error {
 	valid := false
 	authHeader := r.Header.Get("X-Access-Token")
+	logger.Debug("X-Access-Token = ", authHeader)
 	parts := strings.Split(authHeader, ":")
 	if len(parts) == 2 {
 		// validate

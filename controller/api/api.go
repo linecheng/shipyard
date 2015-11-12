@@ -154,6 +154,11 @@ func (a *Api) Run() error {
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
 
+	var resRouter = mux.NewRouter()
+	resRouter.HandleFunc("/resources/list", a.resources).Methods("GET")
+	resRouter.HandleFunc("/resources/{id}", a.deleteResource).Methods("DELETE")
+	globalMux.Handle("/resources/", resRouter)
+
 	auditExcludes := []string{
 		"^/containers/json",
 		"^/images/json",

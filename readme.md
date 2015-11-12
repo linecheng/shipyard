@@ -56,3 +56,5 @@ Run the following:
 
 # License
 Shipyard is licensed under the Apache License, Version 2.0. See LICENSE for full license text.
+
+./controller -D server --rethinkdb-addr 192.168.5.55:28015 -d tcp://192.168.5.55:4375

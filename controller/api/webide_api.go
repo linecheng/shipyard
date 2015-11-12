@@ -11,6 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/samalba/dockerclient"
+	"github.com/satori/go.uuid"
 	resourcing "github.com/shipyard/shipyard/containerresourcing"
 	"github.com/shipyard/shipyard/swarmclient"
 	"github.com/shipyard/shipyard/utils"
@@ -94,7 +95,7 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var resource = &resourcing.ContainerResource{
-		ResourceID: utils.NewGuid(), Status: resourcing.Avaiable, ContainerID: containerid, CreateTime: time.Now().Local(),
+		ResourceID: uuid.NewV4().String(), Status: resourcing.Avaiable, ContainerID: containerid, CreateTime: time.Now().Local(),
 		LastUpdateTime: time.Now().Local(), Image: "", CreatingConfig: config,
 	}
 	if err := a.manager.SaveResource(resource); err != nil {
@@ -146,7 +147,7 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 
 		containerInfo, err := swarm.InspectContainer(resource.ContainerID)
 		if err != nil {
-			http.Error(w, "resource存在，获得对应Container信息时出现错误。"+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "resource存在，获得对应Container信息时出现错误。ContainerID = "+resource.ContainerID+" Error = "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 

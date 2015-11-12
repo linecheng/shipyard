@@ -61,6 +61,7 @@ type (
 		store            *sessions.CookieStore
 		client           *dockerclient.DockerClient
 		disableUsageInfo bool
+		idesession       *r.Session
 	}
 
 	ScaleResult struct {
@@ -115,6 +116,8 @@ type (
 
 		//后端资源
 		SaveResource(res *resource.ContainerResource) error
+		ResourceList() (*[]resource.ContainerResource, error)
+		DeleteResource(resourceId string) error
 		UpdateResource(resourceid string, res *resource.ContainerResource) error
 		GetResource(resourceid string) (*resource.ContainerResource, error)
 		WaitUntilResourceAvaiable(resourceID string, timeout time.Duration, c_done chan map[string]string)
@@ -131,6 +134,18 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 	if err != nil {
 		return nil, err
 	}
+
+	idesession, err2 := r.Connect(r.ConnectOpts{
+		Address:  addr,
+		Database: db_webide_backend,
+		AuthKey:  authKey,
+		MaxIdle:  10,
+	})
+
+	if err2 != nil {
+		return nil, err2
+	}
+
 	log.Info("checking database")
 
 	r.DbCreate(database).Run(session)
@@ -138,6 +153,7 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 		database:         database,
 		authKey:          authKey,
 		session:          session,
+		idesession:       idesession,
 		authenticator:    authenticator,
 		store:            store,
 		client:           client,
