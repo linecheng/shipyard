@@ -45,14 +45,19 @@ func (m DefaultManager) UpdateResource(resourceid string, res *resource.Containe
 }
 
 func (m DefaultManager) ResourceList() (*[]resource.ContainerResource, error) {
+	log.Infoln("/resources/list")
 	res, err := r.Db(db_webide_backend).Table(table_resource).Run(m.idesession)
-	defer func() {
-		if res != nil {
-			res.Close()
-		}
-	}()
+	log.Infoln("query ")
+	//	defer func() {
+	//		if res != nil {
+	//			log.Infoln("close cursor")
+	//			res.Close()
+	//			log.Infoln("close ok")
+	//		}
+	//	}()
 
 	if err != nil {
+		log.Infoln("error !!->", err)
 		return nil, err
 	}
 
@@ -61,9 +66,12 @@ func (m DefaultManager) ResourceList() (*[]resource.ContainerResource, error) {
 		return nil, nil
 	}
 
+	log.Infoln("res.All")
 	if res.All(&array); err != nil {
+		log.Infoln("res.All Error ", err)
 		return nil, err
 	}
+	log.Infoln("will return")
 	return &array, nil
 }
 
@@ -71,11 +79,11 @@ func (m DefaultManager) DeleteResource(resourceId string) error {
 	var res *r.Cursor
 	var err error
 	res, err = r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceId}).Run(m.idesession)
-	defer func() {
-		if res != nil {
-			res.Close()
-		}
-	}()
+	//	defer func() {
+	//		if res != nil {
+	//			res.Close()
+	//		}
+	//	}()
 
 	if err != nil {
 		return err
@@ -99,11 +107,11 @@ func (m DefaultManager) DeleteResource(resourceId string) error {
 
 func (m DefaultManager) GetResource(resourceid string) (*resource.ContainerResource, error) {
 	res, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Run(m.idesession)
-	defer func() {
-		if res != nil {
-			res.Close()
-		}
-	}()
+	//	defer func() {
+	//		if res != nil {
+	//			res.Close()
+	//		}
+	//	}()
 
 	if err != nil {
 		return nil, err
@@ -128,12 +136,12 @@ func (m DefaultManager) WaitUntilResourceAvaiable(resourceID string, timeout tim
 	}
 	var begin = time.Now()
 	log.Infof("开始等待资源%s由Moving转为可用状态,%ds秒后超时", resourceID, timeout/time.Second)
-	var res *r.Cursor
-	defer func() {
-		if res != nil {
-			res.Close()
-		}
-	}()
+	//var res *r.Cursor
+	//	defer func() {
+	//		if res != nil {
+	//			res.Close()
+	//		}
+	//	}()
 
 	for {
 		if time.Now().Sub(begin) > timeout {
