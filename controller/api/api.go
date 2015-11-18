@@ -335,7 +335,7 @@ func (a *Api) Run() error {
 			"/exec/{execid:.*}/resize":   swarmRedirect,
 		},
 		"DELETE": {
-			"/containers/{name:.*}": swarmRedirect,
+			"/containers/{name:.*}": a.redirectToContainer,
 			"/images/{name:.*}":     swarmRedirect,
 		},
 		"OPTIONS": {
