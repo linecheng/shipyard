@@ -215,7 +215,7 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	if resource.Status == resourcing.Avaiable {
 		log.Infof("资源%s可用，将尝试启动", resource.ResourceID)
 		//转发到原生api上进行启动
-		a._redirectToStartContainer(resource.ContainerID, w, req)
+		a._redirectToContainer(resource.ContainerID, w, req)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 
 		//容器创建成功之后，转发到原生的启动接口上
 		log.Infoln("开始启动容器->" + containerid)
-		a._redirectToStartContainer(containerid, w, req)
+		a._redirectToContainer(containerid, w, req)
 		return
 	}
 
@@ -259,7 +259,7 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 			return
 		} else {
 			log.Infof("资源%s状态已为avaiable, ContainerID = ", done["containerID"])
-			a._redirectToStartContainer(done["containerID"], w, req)
+			a._redirectToContainer(done["containerID"], w, req)
 			return
 		}
 
@@ -272,7 +272,8 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func (a *Api) _redirectToStartContainer(containerID string, w http.ResponseWriter, req *http.Request) {
+//containers/xxx --->/containers/containerid
+func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, req *http.Request) {
 	var err error
 	req.URL, err = url.ParseRequestURI(a.dUrl)
 	if err != nil {
@@ -281,15 +282,16 @@ func (a *Api) _redirectToStartContainer(containerID string, w http.ResponseWrite
 	}
 
 	var segments []string = strings.Split(req.RequestURI, "/")
-	if len(segments) > 3 {
+	if len(segments) >= 3 {
 		segments[2] = containerID
 	}
 
 	req.RequestURI = strings.Join(segments, "/")
-	log.Debugln("转发至" + req.URL.String() + req.RequestURI + "启动container")
+	log.Debugln("转发至 " + req.Method + "   " + req.URL.String() + req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
 
+//将会将/XX/{name} 替换成 /containers/containerID
 func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
@@ -316,12 +318,14 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var segments []string = strings.Split(req.RequestURI, "/")
-	if len(segments) > 3 {
+	if len(segments) >= 3 {
 		segments[1] = "containers"
 		segments[2] = resource.ContainerID
 	}
 
 	req.RequestURI = strings.Join(segments, "/")
+	log.Infoln("req.URL=", req.URL.String())
+	log.Infoln("req.ResuestURI=", req.RequestURI)
 	log.Infoln("转发至" + req.URL.String() + req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
@@ -365,41 +369,6 @@ func (a *Api) _recursiveToStartContainer(docker *swarmclient.SwarmClient, contai
 	}
 }
 
-//func (a *Api) _recursiveToStartContainer(docker *swarmclient.SwarmClient, containerid string) (*swarmclient.ContainerInfo, error) {
-
-//	var baseerror = errors.New("StartContainer 出错,ContainerID=" + containerid)
-
-//	var containerInfo, err = docker.InspectContainer(containerid)
-//	if err != nil {
-//		return nil, utils.Errors(baseerror, err)
-//	}
-//	if containerInfo.State.Running {
-//		return containerInfo, nil
-//	}
-
-//	if count >= MAXCOUNT {
-//		return nil, errors.New("容器尝试启动超过最大次数，启动失败")
-//	}
-
-//	if err := docker.StartContainer(containerid, nil); err != nil {
-//		return nil, utils.Errors(baseerror, err)
-//	}
-//	log.Infof(" 第 %d次启动%s 容器", count+1, containerid)
-//	count++
-
-//	containerInfo, err = docker.InspectContainer(containerid)
-//	if err != nil {
-//		return nil, utils.Errors(baseerror, err)
-//	}
-//	if containerInfo.State.Running {
-//		log.Infof("容器%s启动成功", containerid)
-//		count = 0
-//		return containerInfo, nil
-//	} else {
-//		return a._recursiveToStartContainer(docker, containerid)
-//	}
-//}
-
 func (a *Api) appendLocalRegistryToImageName(imageName string) (string, error) {
 	if imageName == "" {
 		return "", errors.New("镜像名称不能为空")
@@ -435,6 +404,60 @@ func (a *Api) _createContainerByImage(swarm *swarmclient.SwarmClient, imageName 
 
 	return containerid, nil
 
+}
+
+func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
+	var data = mux.Vars(req)
+	var resourceid = data["name"]
+	req.ParseForm()
+	v, force := false, false
+
+	if req.FormValue("v") == "1" || strings.ToLower(req.FormValue("v")) == "true" {
+		v = true
+	}
+	if req.FormValue("force") == "1" || strings.ToLower(req.FormValue("force")) == "true" {
+		force = true
+	}
+
+	var resource, err = a.manager.GetResource(resourceid)
+
+	if err != nil {
+		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if resource == nil {
+		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
+		return
+	}
+
+	if resource.Status == resourcing.Moving {
+		w.WriteHeader(http.StatusAccepted) //如果是正在移动中该条数据不能立即删除!!
+		return
+	}
+
+	client, err := a._getSwarmClient()
+	if err != nil {
+		http.Error(w, "a._getSwarmClient() Error : "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	//先删除容器
+	err = client.RemoveContainer(resource.ContainerID, force, v)
+	if err != nil {
+		log.Infoln(err)
+		http.Error(w, "容器id="+resource.ContainerID+"删除失败: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	//再删除资源
+	err = a.manager.DeleteResource(resourceid)
+	if err != nil {
+		http.Error(w, "资源id="+resourceid+"删除失败: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Infoln("资源" + resourceid + "以及容器" + resource.ContainerID + "已删除")
+	w.WriteHeader(http.StatusNoContent)
+	return
 }
 
 func (a *Api) abandonContainer(w http.ResponseWriter, req *http.Request) {

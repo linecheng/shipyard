@@ -154,11 +154,6 @@ func (a *Api) Run() error {
 	// global handler
 	globalMux.Handle("/", http.FileServer(http.Dir("static")))
 
-	var resRouter = mux.NewRouter()
-	resRouter.HandleFunc("/resources/list", a.resources).Methods("GET")
-	resRouter.HandleFunc("/resources/{id}", a.deleteResource).Methods("DELETE")
-	globalMux.Handle("/resources/", resRouter)
-
 	auditExcludes := []string{
 		"^/containers/json",
 		"^/images/json",
@@ -335,7 +330,7 @@ func (a *Api) Run() error {
 			"/exec/{execid:.*}/resize":   swarmRedirect,
 		},
 		"DELETE": {
-			"/containers/{name:.*}": a.redirectToContainer,
+			"/containers/{name:.*}": a.deleteContainer,
 			"/images/{name:.*}":     swarmRedirect,
 		},
 		"OPTIONS": {
@@ -383,6 +378,18 @@ func (a *Api) Run() error {
 	globalMux.Handle("/v1.18/", swarmAuthRouter)
 	globalMux.Handle("/v1.19/", swarmAuthRouter)
 	globalMux.Handle("/v1.20/", swarmAuthRouter)
+
+	var resourceRouter = mux.NewRouter()
+	resourceRouter.HandleFunc("/resources/list", a.resources).Methods("GET")
+	resourceRouter.HandleFunc("/resources/{id}", a.deleteResource).Methods("DELETE")
+	resourceAuthRouter := negroni.New()
+	resourceAuthRequired := mAuth.NewAuthRequired(controllerManager, a.authWhitelistCIDRs)
+	resourceAccessRequired := access.NewAccessRequired(controllerManager)
+	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAuthRequired.HandlerFuncWithNext))
+	resourceAuthRouter.Use(negroni.HandlerFunc(resourceAccessRequired.HandlerFuncWithNext))
+	resourceAuthRouter.Use(negroni.HandlerFunc(apiAuditor.HandlerFuncWithNext))
+	resourceAuthRouter.UseHandler(resourceRouter)
+	globalMux.Handle("/resources/", resourceAuthRouter)
 
 	// check for admin user
 	if _, err := controllerManager.Account("admin"); err == manager.ErrAccountDoesNotExist {
