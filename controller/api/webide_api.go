@@ -150,7 +150,7 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "resource存在，获得对应Container信息时出现错误。ContainerID = "+resource.ContainerID+" Error = "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-
+		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(containerInfo); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -201,7 +201,7 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if resource == nil {
-		http.Error(w, "No such resource "+resource.ResourceID, 404) //资源不存在
+		http.Error(w, "No such resource "+resourceID, 404) //资源不存在
 		return
 	}
 

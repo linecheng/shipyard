@@ -95,7 +95,11 @@
                             <span class="hidden">{{vm.resourceStatusText(c)}}</span>-->
                         </td>
                         <td>{{c.ResourceID | limitTo:12 }}</td>
-                        <td ui-sref="dashboard.inspect({id: c.ContainerID})"  ><a style="cursor: pointer;">{{c.ContainerID | limitTo:12  }}</a></td>
+                        <td  >
+   		   <i class="circle icon" ng-class="c.ExistContainer ?'check circle outline green':'remove circle outline grey'"></i>
+		   <a style="cursor: pointer;" ui-sref="dashboard.inspect({id: c.ContainerID})" >{{c.ContainerID  }} 
+		    </a>
+	        </td>
                         <td>{{c.Status}}</td> 
                         <td class="collapsing">
                             <div ui-sref="dashboard.inspect({id: c.ResourceID})" class="basic compact blue ui icon button">

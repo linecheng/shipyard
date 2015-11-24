@@ -3,7 +3,6 @@ package manager
 import (
 	"errors"
 	"fmt"
-	_ "fmt"
 	log "github.com/Sirupsen/logrus"
 	r "github.com/dancannon/gorethink"
 	resource "github.com/shipyard/shipyard/containerresourcing"
