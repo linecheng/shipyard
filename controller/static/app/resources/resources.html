@@ -79,6 +79,7 @@
                         <th class="collapsing">ResourceId</th>
                         <th>ContainerID</th>
                         <th>Resource Status</th>
+	         <th>Create Time</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -101,6 +102,7 @@
 		    </a>
 	        </td>
                         <td>{{c.Status}}</td> 
+	        <td>{{c.CreateTime  }}</td>
                         <td class="collapsing">
                             <div ui-sref="dashboard.inspect({id: c.ResourceID})" class="basic compact blue ui icon button">
                                 <i class="search icon"></i>
