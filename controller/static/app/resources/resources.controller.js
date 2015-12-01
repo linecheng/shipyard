@@ -187,6 +187,9 @@
             return components[1];
         }
         function containerName(container) {
+	if (container == undefined) {
+                return "-"
+            }
             // Remove the node name by returning the last name component of the shortest container name
             var components = shortestContainerName(container).split('/');
             return components[components.length - 1];
