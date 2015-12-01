@@ -745,6 +745,59 @@ func (client *DockerClient) BuildImage(image *BuildImage) (io.ReadCloser, error)
 	return client.doStreamRequest("POST", uri, image.Context, headers)
 }
 
+func (client *DockerClient) PushImage(name string, tag string, auth *AuthConfig) error {
+	v := url.Values{}
+	if tag != "" {
+		v.Set("tag", tag)
+	}
+	uri := fmt.Sprintf("/images/%s/push?%s", url.QueryEscape(name), v.Encode())
+	req, err := http.NewRequest("POST", client.URL.String()+uri, nil)
+	if auth != nil {
+		if encodedAuth, err := auth.encode(); err != nil {
+			return err
+		} else {
+			req.Header.Add("X-Registry-Auth", encodedAuth)
+		}
+	} else {
+		req.Header.Add("X-Registry-Auth", "!") //如果不加个值，服务端会报缺少X-Registry-Auth
+	}
+	resp, err := client.HTTPClient.Do(req)
+	//fmt.Printf("---- req.URL.RequestURL= %s", req.URL.RequestURI())
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var finalObj map[string]interface{}
+	//var allData = []byte{}
+	//	for {
+	//		fmt.Println("@@@")
+	//		var buffer = make([]byte, 1024*4, 1024*4)
+	//		count, err := resp.Body.Read(buffer)
+	//		if err != nil {
+	//			fmt.Println("in for ", err)
+	//			//break
+	//		}
+	//		if count == 0 {
+	//			break
+	//		}
+	//		allData = append(allData, buffer[0:count]...)
+	//	}
+	//	fmt.Println(allData)
+	//	fmt.Println("allData1->" + string(allData))
+
+	for decoder := json.NewDecoder(resp.Body); err == nil; err = decoder.Decode(&finalObj) {
+	}
+	if err != io.EOF {
+		fmt.Println("json parse error ", err)
+		return errors.New("json parse error" + err.Error())
+	}
+
+	if err, ok := finalObj["error"]; ok {
+		return fmt.Errorf("%v", err)
+	}
+	return nil
+}
+
 func (client *DockerClient) Commit(id string, c *ContainerConfig, repo, tag, comment, author string, pause bool) (string, error) {
 	config, err := json.Marshal(c)
 	if err != nil {

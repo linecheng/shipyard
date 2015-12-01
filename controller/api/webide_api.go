@@ -643,6 +643,7 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceId = data["id"]
 	infoes, ok := movingProgressCache[resourceId]
+	w.Header().Set("Content-Type", "application/json")
 	//不存在
 	if ok == false {
 		dbResource, err := a.manager.GetResource(resourceId)
@@ -699,7 +700,6 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		w.WriteHeader(200)
-		log.Debugln("进度信息长度---->%d", len(infoes))
 		data, err := json.Marshal(infoes)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -727,6 +727,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 					log.Warn("_moveResourceAndUpdateDb defer 资源状态置位失败 ：", err.Error())
 				}
 			}
+			//无论成功与否，均移除缓存内的标记
+			removeMovingIdInCache(resource.ResourceID)
 		}()
 
 		progressCh <- "开始移动资源"
@@ -750,8 +752,17 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			errorCh <- err
 			return
 		}
-		progressCh <- "镜像完成，开始重建资源"
-		log.Info("镜像完成，开始重建资源")
+		progressCh <- "镜像打包完成，开始推送镜像"
+		log.Info("镜像打包完成，开始推送镜像  ", repo+":"+tag)
+		var imgFullName = repo + ":" + tag
+		err = client.PushImage(repo, tag, nil)
+		if err != nil {
+			progressCh <- "推送镜像时出现错误： " + err.Error()
+			log.Error("推送镜像时出现错误： " + err.Error())
+			errorCh <- err
+			return
+		}
+
 		nodeClient, err := dockerclient.NewDockerClientTimeout(toAddr, nil, time.Duration(requestTimeout))
 		if err != nil {
 			progressCh <- "连接到Docker服务器出现错误： " + err.Error()
@@ -760,7 +771,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			return
 		}
 		var config = resource.CreatingConfig
-		config.Image = repo + ":" + tag
+		config.Image = imgFullName
 		newId, err := nodeClient.CreateContainer(config, "")
 		if err != nil {
 			progressCh <- "重建资源时出现错误：" + err.Error()
@@ -778,14 +789,14 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		}
 
 		progressCh <- "清理旧容器，并更新数据库"
-		log.Infoln("清理旧容器，并更新数据库")
+		log.Infoln("正在清理旧容器，并更新数据库")
 		err = nodeClient.RemoveContainer(resource.ContainerID, true, true)
 		if err != nil {
 			log.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
 		}
 
-		progressCh <- "资源重建成功，开始更新数据库"
-		log.Infoln("资源重建成功，开始更新数据库")
+		progressCh <- "资源重建成功，正在更新数据库"
+		log.Infoln("资源重建成功，正在更新数据库")
 		resource.ContainerID = newId
 		resource.Status = resourcing.Avaiable
 
@@ -797,10 +808,11 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			return
 		}
 
-		removeMovingIdInCache(resource.ResourceID)
-
 		progressCh <- "数据库更新完成，资源移动成功"
-		log.Infoln("数据库更新完成，资源移动成功,返回新的容器id为 ", newId)
+		progressCh <- "正在更新集群数据"
+		log.Infoln("正在更新集群数据")
+		time.Sleep(60 * time.Second) //swarm 的集群刷新有1分钟的延迟。
+		log.Infoln("移动操作成功,返回新的容器id为 ", newId)
 		newIdCh <- newId
 
 		return
