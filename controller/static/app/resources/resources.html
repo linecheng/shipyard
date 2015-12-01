@@ -1,20 +1,41 @@
 <div id="delete-modal" class="ui small modal transition">
-<i class="close icon"></i>
-<div class="header">
-    Delete Resource In DB: {{ vm.selectedResourceId | limitTo:12 }}
-</div>
-<div class="content">
-    <p>仅删除数据库中的记录,你需要手动删除对应的容器!!!!!!!!</p>
-</div>
-<div class="actions">
-    <div class="ui negative button">
-        No
+    <i class="close icon"></i>
+    <div class="header">
+        Delete Resource In DB: {{ vm.selectedResourceId | limitTo:12 }}
     </div>
-    <div ng-click="vm.deleteResource()" class="ui positive right labeled icon button">
-        Yes
-        <i class="checkmark icon"></i>
+    <div class="content">
+        <p>仅删除数据库中的记录,你需要手动删除对应的容器!!!!!!!!</p>
+    </div>
+    <div class="actions">
+        <div class="ui negative button">
+            No
+        </div>
+        <div ng-click="vm.deleteResource()" class="ui positive right labeled icon button">
+            Yes
+            <i class="checkmark icon"></i>
+        </div>
     </div>
 </div>
+
+<div id="move-modal" class="ui small modal transition">
+    <i class="close icon"></i>
+    <div class="header">
+        Move Resource  {{ vm.selectedResourceId }} To Other Node
+    </div>
+    <div class="content">
+        <select class="ui" ng-model="vm.selectedNode">
+            <option ng-repeat="n in vm.nodes" value="{{n.addr}}">{{n.addr}}</option>
+        </select>
+    </div>
+    <div class="actions">
+        <div class="ui negative button">
+            No
+        </div>
+        <div ng-click="vm.moveResource()" class="ui positive right labeled icon button">
+            Yes
+            <i class="checkmark icon"></i>
+        </div>
+    </div>
 </div>
 
 <div class="ui padded grid">
@@ -78,13 +99,18 @@
                         <th id="container-health-table-header" class="collapsing"><i class="heartbeat icon"></i></th>
                         <th class="collapsing">ResourceId</th>
                         <th>ContainerID</th>
+                        <th>Node</th>
+                        <th>Container Name</th>
+                        <th>Image</th>
+                        <th>Container Status</th>
                         <th>Resource Status</th>
-	         <th>Create Time</th>
+                        <th>Create Time</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr ng-class="{'active': vm.selected[c.ResourceID].Selected}" ng-repeat="c in filteredResources = (vm.resources | filter:tableFilter)" jquery>
+                    <tr ng-class="{'active': vm.selected[c.ResourceID].Selected}" ng-repeat="c in filteredResources = (vm.resources | filter:tableFilter)"
+                    jquery>
                         <td class="collapsing">
                             <div class="positive ui fitted checkbox">
                                 <input type="checkbox" id="{{$index}}-cb" ng-model="vm.selected[c.ResourceID].Selected">
@@ -92,17 +118,21 @@
                             </div>
                         </td>
                         <td>
-                           <!-- <i class="circle icon" ng-class="vm.resourceStatusText(c) == 'Running' ? 'green' : vm.resourceStatusText(c) == 'Paused' ? 'yellow' : 'red'"></i>
-                            <span class="hidden">{{vm.resourceStatusText(c)}}</span>-->
+                            <i class="circle icon" ng-class="vm.containerStatusText(c.Container) == 'Running' ? 'green' : vm.resourceStatusText(c.Container) == 'Paused' ? 'yellow' : vm.resourceStatusText(c.Container) == '-' ? '-': 'red'"></i>
+                            <span class="hidden">{{vm.resourceStatusText(c)}}</span>
                         </td>
-                        <td>{{c.ResourceID | limitTo:12 }}</td>
-                        <td  >
-   		   <i class="circle icon" ng-class="c.ExistContainer ?'check circle outline green':'remove circle outline grey'"></i>
-		   <a style="cursor: pointer;" ui-sref="dashboard.inspect({id: c.ContainerID})" >{{c.ContainerID  }} 
-		    </a>
-	        </td>
-                        <td>{{c.Status}}</td> 
-	        <td>{{c.CreateTime  }}</td>
+                        <td>{{c.ResourceID }}</td>
+                        <td>
+                            <i class="circle icon" ng-class="c.ExistContainer ?'check circle outline green':'remove circle outline grey'"></i>
+                            <a style="cursor: pointer;" ui-sref="dashboard.inspect({id: c.ContainerID})">{{c.ContainerID | limitTo:12   }} 
+		   </a>
+                        </td>
+                        <td>{{vm.nodeName(c.Container)}}</td>
+                        <td>{{vm.containerName(c.Container)}}</td>
+                        <td>{{c.Container==undefined?'-':c.Container.Image }}</td>
+                        <td>{{c.Container==undefined?'-':c.Container.Status }}</td>
+                        <td>{{c.Status}}</td>
+                        <td>{{c.CreateTime }}</td>
                         <td class="collapsing">
                             <div ui-sref="dashboard.inspect({id: c.ResourceID})" class="basic compact blue ui icon button">
                                 <i class="search icon"></i>
@@ -112,7 +142,8 @@
                                     <i class="wrench icon"></i>
                                 </div>
                                 <div class="menu">
-                                    <a ng-click="vm.showDeleteResourceDialog(c)" class="item"><i class="red remove icon"></i> Delete</a>
+                                    <a ng-click="vm.showDeleteResourceDialog(c)" class="item"><i class="red remove icon"></i> xxxxDelete</a>
+                                    <a ng-click="vm.showMoveResourceDialog(c)" class="item"><i class="blue move icon"></i> Move</a>
                                 </div>
                             </div>
                         </td>
@@ -142,23 +173,20 @@
         <i class="grid layout icon"></i>{{ vm.selectedItemCount }} Selected
     </a>
     <a class="item" ng-click="vm.clearAll()">
-        <i class="ban icon"></i>
-        Clear 
+        <i class="ban icon"></i> Clear
     </a>
     <a class="item" ng-click="vm.restartAll()">
-        <i class="refresh icon"></i>
-        Restart 
+        <i class="refresh icon"></i> Restart
     </a>
     <a class="item" ng-click="vm.stopAll()">
-        <i class="stop icon"></i>
-        Stop 
+        <i class="stop icon"></i> Stop
     </a>
     <a class="item" ng-click="vm.destroyAll()">
-        <i class="delete icon"></i>
-        Destroy 
+        <i class="delete icon"></i> Destroy
     </a>
 </div>
 
 <script>
-$('.ui.dropdown').dropdown();
+    $('.ui.dropdown').dropdown();
+
 </script>

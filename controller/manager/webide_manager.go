@@ -35,7 +35,7 @@ func (m DefaultManager) SaveResource(res *resource.ContainerResource) error {
 	return err
 }
 func (m DefaultManager) UpdateResource(resourceid string, res *resource.ContainerResource) error {
-	log.Infoln("开始更新资源：ResourceID=" + resourceid)
+	log.Debugln("开始更新资源：ResourceID=" + resourceid)
 	_, err := r.Db(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Update(res).RunWrite(m.idesession)
 	if err != nil {
 		return errors.New("resourceid = " + resourceid + err.Error())

@@ -1,0 +1,17 @@
+{
+	"rethinkdb":{
+		"addr":"192.168.5.55:28015"
+	},
+	"swarm":{
+		"url":"192.168.5.55:2375"
+	},
+	"reverse":{
+		"name":[
+		"Shipyard-Controller","Swarm-Manager","dev-rethink"
+		],
+		"image":[
+		"hello-world"
+		]
+	},
+	"debug-level":4
+}

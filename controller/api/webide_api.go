@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"errors"
 	log "github.com/Sirupsen/logrus"
@@ -489,5 +490,337 @@ func (a *Api) abandonContainer(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
+	return
+}
+
+var (
+	movingIdsCache      []string
+	movingLocker        sync.RWMutex
+	movingProgressCache = map[string][]*movingProgressInfo{} //<resourceid,[]*movingProgressInfo>
+
+)
+
+type movingProgressInfo struct {
+	Time time.Time
+	Msg  string
+	Code string // moving ,end , avaiable,invalide,error
+}
+
+//func (p *movingProgressInfo) String() {
+//	var bts, err = json.Marshal(p)
+//	if err != nil {
+//		return "序列化错误" + err.Error()
+//	} else {
+//		return string(bts)
+//	}
+//}
+
+//containers/xxxx/move?target=xxx
+func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
+	var data = mux.Vars(req)
+	var resourceId = data["id"]
+	if resourceId == "" {
+		log.Error("客户端id参数错误，不能为空")
+		http.Error(w, fmt.Sprint("id参数不能为空"), http.StatusBadRequest) //moving ,wait
+		return
+	}
+
+	req.ParseForm()
+	var addr = req.FormValue("target")
+	if addr == "" {
+		log.Error("客户端target参数错误，不能为空")
+		http.Error(w, fmt.Sprint("target参数不能为空"), http.StatusBadRequest)
+		return
+	}
+
+	//客户端连续多个同一请求同时来时，对 cache的写操作和判定应加锁。
+	//防止因为前一个请求判断通过，还没有append进去时，同 一个id另外一个请求又再次通过请求。
+	movingLocker.Lock()
+
+	var doing = false
+
+	for _, id := range movingIdsCache {
+		if id == resourceId {
+			doing = true
+		}
+	}
+
+	if doing {
+		http.Error(w, "moving ,please wait", http.StatusAccepted) //moving ,wait
+		movingLocker.Unlock()
+		return
+	}
+	movingIdsCache = append(movingIdsCache, resourceId)
+
+	if _, ok := movingProgressCache[resourceId]; ok == true {
+		delete(movingProgressCache, resourceId) //删除旧的进度信息
+	}
+
+	movingLocker.Unlock()
+
+	log.Infoln("Moving Resource ", resourceId)
+
+	var resource, err = a.manager.GetResource(resourceId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("a.manager.GetResource(%s) Error %s", resourceId, err.Error()), http.StatusInternalServerError) //moving ,wait
+		return
+	}
+
+	if resource == nil {
+		http.Error(w, fmt.Sprintf("%s 对应resource不存在", resourceId), http.StatusNotFound) //moving ,wait
+		return
+	}
+
+	if resource.Status == resourcing.Moving {
+		log.Warnf("检测到不一致数据。%s 缓存中无Moving，DB处于Moving状态。", resourceId)
+		http.Error(w, fmt.Sprintf("检测到不一致数据。%s 缓存中无Moving，DB处于Moving状态。", resourceId), http.StatusInternalServerError) //moving ,wait
+		return
+	}
+
+	endCh, progressCh, errorCh := a._moveResourceAndUpdateDb(resource, addr)
+
+	go monitorProgress(resourceId, progressCh, endCh, errorCh)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	w.Write([]byte(`{
+			msg:"moving"
+		}`))
+	return
+}
+
+//监控处理进度, 将 resourceId相关的处理信息收集到内存中
+func monitorProgress(resourceId string, progressCh chan string, endCh chan string, errorCh chan error) {
+	var pCache, ok = movingProgressCache[resourceId]
+	if ok == false {
+		movingProgressCache[resourceId] = []*movingProgressInfo{}
+		pCache = movingProgressCache[resourceId]
+	}
+
+	for {
+		select {
+		case msg := <-progressCh:
+			{
+				pCache = append(pCache, &movingProgressInfo{Time: time.Now(), Msg: msg, Code: "moving"})
+				movingProgressCache[resourceId] = pCache
+			}
+		case err := <-errorCh:
+			{
+				log.Infoln("收到moving resource Error 信号,resourceid=", resourceId)
+				pCache = append(pCache, &movingProgressInfo{Time: time.Now(), Msg: err.Error(), Code: "error"})
+				movingProgressCache[resourceId] = pCache
+				goto END
+			}
+		case <-endCh:
+			{
+				log.Infoln("收到moving resource  end信号,resourceid=", resourceId)
+				pCache = append(pCache, &movingProgressInfo{Time: time.Now(), Msg: "资源移动已完成", Code: "end"})
+				movingProgressCache[resourceId] = pCache
+				goto END
+			}
+		}
+	}
+
+END:
+	go func() {
+		log.Infof("资源%s Moving结束, 2分钟后,删除内存中的进度信息", resourceId)
+		old := movingProgressCache[resourceId]
+		<-time.Tick(2 * time.Minute)                                                                                  //进度信息完成后暂存2分钟 这样可以让客户端在移动结束后,仍然能得到全部的进度信息
+		now := movingProgressCache[resourceId]                                                                        //防止在2分钟内，资源又被移动，处于移动中。
+		if _, ok := movingProgressCache[resourceId]; ok == true && fmt.Sprintf("%p", old) == fmt.Sprintf("%p", now) { //查看进度信息是否更新了。
+			delete(movingProgressCache, resourceId)
+			log.Infof("资源%s Moving结束, 进度信息已删除", resourceId)
+		}
+	}()
+
+	log.Infoln(movingProgressCache[resourceId])
+
+	return
+}
+
+//获取 资源移动的进度
+func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
+	var data = mux.Vars(req)
+	var resourceId = data["id"]
+	infoes, ok := movingProgressCache[resourceId]
+	//不存在
+	if ok == false {
+		dbResource, err := a.manager.GetResource(resourceId)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("a.manager.GetResource(%s)", resourceId)+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if dbResource == nil {
+			http.Error(w, fmt.Sprintf("%s资源不存在", resourceId), http.StatusNotFound)
+			return
+		}
+
+		if dbResource.Status == resourcing.Avaiable {
+			w.WriteHeader(200)
+			var info = []*movingProgressInfo{
+				&movingProgressInfo{
+					Code: "avaiable", Msg: "资源目前可用,未处于移动状态", Time: time.Now(),
+				}}
+			data, err := json.Marshal(info)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			w.Write([]byte(data))
+			return
+		}
+
+		if dbResource.Status == resourcing.Moving {
+			w.WriteHeader(200)
+			var info = []*movingProgressInfo{
+				&movingProgressInfo{
+					Code: "moving", Msg: "无法获取移动进度", Time: time.Now(),
+				}}
+			data, err := json.Marshal(info)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			w.Write([]byte(data))
+			return
+		}
+
+		if dbResource.Status == resourcing.Image {
+			w.WriteHeader(200)
+			var info = []*movingProgressInfo{
+				&movingProgressInfo{
+					Code: "invalide", Msg: "当前资源已镜像化", Time: time.Now(),
+				}}
+			data, err := json.Marshal(info)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			w.Write([]byte(data))
+			return
+		}
+	} else {
+		w.WriteHeader(200)
+		log.Debugln("进度信息长度---->%d", len(infoes))
+		data, err := json.Marshal(infoes)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.Write([]byte(data))
+		return
+	}
+}
+
+var requestTimeout = 10 * time.Second
+
+func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, toAddr string) (newIdCh chan string, progressCh chan string, errorCh chan error) {
+	newIdCh = make(chan string)
+	errorCh = make(chan error)
+	progressCh = make(chan string) //如果progress 缓冲区个数不为1,那么要确保再接受到end的时候，flush一下 progress.
+
+	go func() {
+
+		defer func() {
+			//查看最终资源状态，无论移动是否成功，最终都应该置为可用状态
+			if resource.Status != resourcing.Avaiable {
+				resource.Status = resourcing.Avaiable
+				err := a.manager.UpdateResource(resource.ResourceID, resource)
+				if err != nil {
+					log.Warn("_moveResourceAndUpdateDb defer 资源状态置位失败 ：", err.Error())
+				}
+			}
+		}()
+
+		progressCh <- "开始移动资源"
+		log.Infoln("开始移动资源")
+
+		resource.Status = resourcing.Moving
+		a.manager.UpdateResource(resource.ResourceID, resource)
+
+		client, err := a._getSwarmClient()
+
+		progressCh <- "开始提交镜像"
+		log.Infoln("开始提交镜像")
+		var repo = a.registryAddr + "/webide-moving/" + resource.CreatingConfig.Hostname
+		var tag = fmt.Sprintf("%d", time.Now().Unix())
+		var coment = fmt.Sprintf("%s Moving 产生临时镜像", time.Now().String())
+		id, err := client.Commit(resource.ContainerID, nil, repo, tag, coment, "webide-moving", true)
+		log.Info("Moving 产生临时镜像 image id = ", id)
+		if err != nil {
+			progressCh <- "提交镜像出现错误： " + err.Error()
+			log.Error("提交镜像出现错误： " + err.Error())
+			errorCh <- err
+			return
+		}
+		progressCh <- "镜像完成，开始重建资源"
+		log.Info("镜像完成，开始重建资源")
+		nodeClient, err := dockerclient.NewDockerClientTimeout(toAddr, nil, time.Duration(requestTimeout))
+		if err != nil {
+			progressCh <- "连接到Docker服务器出现错误： " + err.Error()
+			log.Error("连接到Docker服务器出现错误： " + err.Error())
+			errorCh <- err
+			return
+		}
+		var config = resource.CreatingConfig
+		config.Image = repo + ":" + tag
+		newId, err := nodeClient.CreateContainer(config, "")
+		if err != nil {
+			progressCh <- "重建资源时出现错误：" + err.Error()
+			log.Errorf("resource %s Moving Fail.  Image Success , image full name is  %s , But Create Fail.", resource.ResourceID, config.Image)
+			errorCh <- err
+			return
+		}
+
+		err = nodeClient.StartContainer(newId, nil)
+		if err != nil {
+			log.Error("资源创建成功，但无法启动。", err.Error())
+			progressCh <- "资源创建成功，但无法启动。" + err.Error()
+			errorCh <- errors.New("资源创建成功，但无法启动。" + err.Error())
+			return
+		}
+
+		progressCh <- "清理旧容器，并更新数据库"
+		log.Infoln("清理旧容器，并更新数据库")
+		err = nodeClient.RemoveContainer(resource.ContainerID, true, true)
+		if err != nil {
+			log.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
+		}
+
+		progressCh <- "资源重建成功，开始更新数据库"
+		log.Infoln("资源重建成功，开始更新数据库")
+		resource.ContainerID = newId
+		resource.Status = resourcing.Avaiable
+
+		err = a.manager.UpdateResource(resource.ResourceID, resource)
+		if err != nil {
+			errorCh <- err
+			progressCh <- "资源重建后更新数据库标识出错，Error : " + err.Error()
+			log.Error("资源重建后更新数据库标识出错，Error : " + err.Error())
+			return
+		}
+
+		removeMovingIdInCache(resource.ResourceID)
+
+		progressCh <- "数据库更新完成，资源移动成功"
+		log.Infoln("数据库更新完成，资源移动成功,返回新的容器id为 ", newId)
+		newIdCh <- newId
+
+		return
+	}()
+
+	return newIdCh, progressCh, errorCh
+}
+
+func removeMovingIdInCache(id string) {
+	//禁止读写
+	movingLocker.Lock()
+	defer movingLocker.Unlock()
+
+	var result = []string{}
+	for _, item := range movingIdsCache {
+		if item != id {
+			result = append(result, item)
+		}
+	}
+
+	movingIdsCache = result
 	return
 }

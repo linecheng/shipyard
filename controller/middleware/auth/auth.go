@@ -77,8 +77,8 @@ func (a *AuthRequired) handleRequest(w http.ResponseWriter, r *http.Request) err
 	valid := false
 	// service key takes priority
 	serviceKey := r.Header.Get("X-Service-Key")
-	logger.Infoln("X-Service-Key = ", serviceKey)
-	logger.Infoln("header is ->", r.Header)
+	//	logger.Infoln("X-Service-Key = ", serviceKey)
+	//	logger.Infoln("header is ->", r.Header)
 	if serviceKey != "" {
 		if err := a.manager.VerifyServiceKey(serviceKey); err == nil {
 			valid = true

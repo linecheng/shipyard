@@ -42,6 +42,9 @@ func CmdServer(c *cli.Context) {
 	tlsKey := c.String("tls-key")
 	allowInsecure := c.Bool("allow-insecure")
 	registry := c.String("registry")
+	if registry == "" {
+		log.Fatalln("registry cannot be empty!")
+	}
 
 	client, err := utils.GetClient(dockerUrl, tlsCaCert, tlsCert, tlsKey, allowInsecure)
 	if err != nil {
