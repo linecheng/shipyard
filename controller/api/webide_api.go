@@ -739,8 +739,16 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 
 		client, err := a._getSwarmClient()
 
-		progressCh <- "开始提交镜像"
-		log.Infoln("开始提交镜像")
+		progressCh <- "正在打包提交镜像"
+		log.Infoln("正在打包提交镜像")
+		err = client.StopContainer(resource.ContainerID, 60)
+		if err != nil {
+			progressCh <- "提交前停止容器出现错误： " + err.Error()
+			log.Error("提交前停止容器出现错误： " + err.Error())
+			errorCh <- err
+			return
+		}
+
 		var repo = a.registryAddr + "/webide-moving/" + resource.CreatingConfig.Hostname
 		var tag = fmt.Sprintf("%d", time.Now().Unix())
 		var coment = fmt.Sprintf("%s Moving 产生临时镜像", time.Now().String())
@@ -752,8 +760,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			errorCh <- err
 			return
 		}
-		progressCh <- "镜像打包完成，开始推送镜像"
-		log.Info("镜像打包完成，开始推送镜像  ", repo+":"+tag)
+		progressCh <- "镜像打包完成，正在推送镜像"
+		log.Info("镜像打包完成，正在推送镜像  ", repo+":"+tag)
 		var imgFullName = repo + ":" + tag
 		err = client.PushImage(repo, tag, nil)
 		if err != nil {
@@ -763,24 +771,30 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			return
 		}
 
-		nodeClient, err := dockerclient.NewDockerClientTimeout(toAddr, nil, time.Duration(requestTimeout))
+		var config = resource.CreatingConfig
+		config.Image = imgFullName
+		nodeName, err := a.getNodeNameByNodeAddress(toAddr)
 		if err != nil {
-			progressCh <- "连接到Docker服务器出现错误： " + err.Error()
-			log.Error("连接到Docker服务器出现错误： " + err.Error())
+			progressCh <- "查找目标服务器时出现错误 "
+			log.Error("查找目标服务器时出现错误： " + err.Error())
 			errorCh <- err
 			return
 		}
-		var config = resource.CreatingConfig
-		config.Image = imgFullName
-		newId, err := nodeClient.CreateContainer(config, "")
+		if config.Labels == nil {
+			config.Labels = map[string]string{}
+		}
+		progressCh <- "推送完成，正在重建资源"
+		log.Info("推送完成，正在重建资源")
+		config.Labels["com.docker.swarm.constraints"] = fmt.Sprintf(`["node==%s"]`, nodeName) //指定目标服务器
+		newId, err := client.CreateContainer(config, "")
 		if err != nil {
 			progressCh <- "重建资源时出现错误：" + err.Error()
-			log.Errorf("resource %s Moving Fail.  Image Success , image full name is  %s , But Create Fail.", resource.ResourceID, config.Image)
+			log.Errorf("resource %s Moving Fail.  Image Push Success , image full name is  %s , But Create Fail. %s", resource.ResourceID, config.Image, err.Error())
 			errorCh <- err
 			return
 		}
 
-		err = nodeClient.StartContainer(newId, nil)
+		err = client.StartContainer(newId, nil)
 		if err != nil {
 			log.Error("资源创建成功，但无法启动。", err.Error())
 			progressCh <- "资源创建成功，但无法启动。" + err.Error()
@@ -790,7 +804,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 
 		progressCh <- "清理旧容器，并更新数据库"
 		log.Infoln("正在清理旧容器，并更新数据库")
-		err = nodeClient.RemoveContainer(resource.ContainerID, true, true)
+		err = client.RemoveContainer(resource.ContainerID, true, true)
 		if err != nil {
 			log.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
 		}
@@ -809,9 +823,6 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		}
 
 		progressCh <- "数据库更新完成，资源移动成功"
-		progressCh <- "正在更新集群数据"
-		log.Infoln("正在更新集群数据")
-		time.Sleep(60 * time.Second) //swarm 的集群刷新有1分钟的延迟。
 		log.Infoln("移动操作成功,返回新的容器id为 ", newId)
 		newIdCh <- newId
 
@@ -835,4 +846,19 @@ func removeMovingIdInCache(id string) {
 
 	movingIdsCache = result
 	return
+}
+
+func (a *Api) getNodeNameByNodeAddress(addr string) (name string, err error) {
+	nodes, err := a.manager.Nodes()
+	if err != nil {
+		return "", err
+	}
+	for _, n := range nodes {
+		if n.Addr == addr {
+			return n.Name, nil
+		}
+	}
+
+	return "", errors.New(fmt.Sprintf("没有找到%s的node name", addr))
+
 }
