@@ -14,6 +14,7 @@ import (
 	"github.com/samalba/dockerclient"
 	"github.com/satori/go.uuid"
 	resourcing "github.com/shipyard/shipyard/containerresourcing"
+	"github.com/shipyard/shipyard/controller/requniqueness"
 	"github.com/shipyard/shipyard/swarmclient"
 	"github.com/shipyard/shipyard/utils"
 	_ "io"
@@ -192,6 +193,15 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceID = data["name"]
+
+	alreadyError := requniqueness.Handle("/startresource", resourceID) //持有当前资源，禁止其他请求并发再次持有
+	if alreadyError != nil {
+		log.Infoln(resourceID, "StartResource操作正在处理中")
+		w.Write([]byte("正在处理中，请稍候"))
+		return
+	}
+
+	defer requniqueness.Release("/startresource", resourceID)
 
 	log.Infoln("start container ,resource id is " + data["name"])
 
