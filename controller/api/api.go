@@ -302,7 +302,7 @@ func (a *Api) Run() error {
 			"/containers/{name:.*}/top":     a.redirectToContainer,
 			"/containers/{name:.*}/logs":    a.redirectToContainer,
 			"/containers/{name:.*}/stats":   a.redirectToContainer,
-			//"/containers/{name:.*}/attach/ws": swarmHijack,
+			"/containers/{name:.*}/attach/ws": a.redirectToContainer,
 			"/exec/{execid:.*}/json": swarmRedirect,
 		},
 		"POST": {
@@ -323,7 +323,7 @@ func (a *Api) Run() error {
 			"/containers/{name:.*}/stop":    a.redirectToContainer,
 			"/containers/{name:.*}/wait":    a.redirectToContainer,
 			"/containers/{name:.*}/resize":  a.redirectToContainer,
-			// "/containers/{name:.*}/attach":  swarmHijack,
+			 "/containers/{name:.*}/attach":  a.redirectToContainer,
 			"/containers/{name:.*}/copy": a.redirectToContainer,
 			"/containers/{name:.*}/exec": a.redirectToContainer,
 			"/exec/{execid:.*}/start":    swarmHijack,

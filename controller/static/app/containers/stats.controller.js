@@ -4,7 +4,7 @@
     angular
         .module('shipyard.containers')
         .controller('ContainerStatsController', ContainerStatsController);
-
+     var  prefix ="/origin";
     ContainerStatsController.$inject = ['$stateParams', '$scope'];
     function ContainerStatsController($stateParams, $scope) {
         var vm = this;
@@ -57,7 +57,7 @@
             var cpuPercent = 0.0;
             if(usageSample > 0.0 && systemUsageSample > 0.0) {
                 cpuPercent = (usageSample / systemUsageSample) * cpuCores * 100.0;
-            }                
+            }
 
             var stat = { x: date, y: cpuPercent };
             vm.cpuStats[0].values.push(stat);
@@ -169,7 +169,7 @@
         });
 
         var stream = oboe({
-            url: '/containers/' + vm.id + '/stats',
+            url: prefix+'/containers/' + vm.id + '/stats',
             withCredentials: true,
             headers: {
                 'X-Access-Token': localStorage.getItem("X-Access-Token")
