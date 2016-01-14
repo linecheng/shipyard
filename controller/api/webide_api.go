@@ -341,6 +341,50 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	a.fwd.ServeHTTP(w, req)
 }
 
+func (a *Api) redirectToContainerHijack(w http.ResponseWriter, req *http.Request) {
+	var data = mux.Vars(req)
+	var resourceid = data["name"]
+	log.Debugln("开始转发对" + req.RequestURI + "请求")
+	var resource, err = a.manager.GetResource(resourceid)
+	if err != nil {
+		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusNotFound)
+		return
+	}
+	if resource == nil {
+		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
+		return
+	}
+
+	if resource.Status != resourcing.Avaiable {
+		http.Error(w, "资源id="+resourceid+"对应的资源不可用，状态="+resource.Status+"，请确保客户端在Connect状态下进行操作", http.StatusForbidden)
+		return
+	}
+
+	// req.URL, err = url.ParseRequestURI(a.dUrl)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+
+	var segments []string = strings.Split(req.RequestURI, "/")
+	if len(segments) >= 3 {
+		segments[1] = "containers"
+		segments[2] = resource.ContainerID
+	}
+	log.Infoln("before req.ResuestURI=", req.RequestURI)
+	req.RequestURI = strings.Join(segments, "/")
+	log.Infoln("req.URL=", req.URL.String())
+	log.Infoln("req.ResuestURI=", req.RequestURI)
+	log.Infoln("转发至" + req.URL.String() + req.RequestURI)
+	req.URL,_=url.ParseRequestURI(req.RequestURI)
+	log.Infoln("req.URL=", req.URL.String())
+	//a.fwd.ServeHTTP(w, req)
+	log.Infof("%v",&req)
+	
+	a.swarmHijack(nil, a.dUrl, w, req)
+}
+
+
 const MAXCOUNT int = 3
 
 var count int = 0
