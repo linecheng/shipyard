@@ -16,7 +16,7 @@ import (
 	resourcing "github.com/shipyard/shipyard/containerresourcing"
 	"github.com/shipyard/shipyard/controller/requniqueness"
 	"github.com/shipyard/shipyard/swarmclient"
-	"github.com/shipyard/shipyard/utils"
+	_ "github.com/shipyard/shipyard/utils"
 	_ "io"
 	"io/ioutil"
 	"net/http"
@@ -57,6 +57,7 @@ Status 向后端提供ResourceID，后端取得该ResourceID对应的ContainerID
 func (a *Api) _getSwarmClient() (*swarmclient.SwarmClient, error) {
 	_docker, err := dockerclient.NewDockerClient(a.dUrl, nil)
 	if err != nil {
+		log.Error("dockerclient.NewDockerClient 错误" + err.Error())
 		return nil, errors.New("getSwarmClient出现错误" + err.Error())
 	}
 	swarm := swarmclient.NewSwarmClientByDockerClient(_docker)
@@ -65,10 +66,10 @@ func (a *Api) _getSwarmClient() (*swarmclient.SwarmClient, error) {
 
 //containers/create
 func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
-	log.Infoln("begin to Apply Container")
 	swarm, err := a._getSwarmClient()
 
 	if err != nil {
+		log.Error("a._getSwarmClient Error",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -81,17 +82,20 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 
 	bts, err := ioutil.ReadAll(req.Body)
 	if err != nil {
+		log.Error("ioutil.ReadAll() Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	err = json.Unmarshal(bts, config)
 	if err != nil {
+		log.Error("json.Unmarshall() Error: ",err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	log.Infoln("begin to create Container")
 	containerid, err := swarm.CreateContainer(config, name)
 	if err != nil {
+		log.Error("swarm.CreateContainer() Error :","name = ",name,err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -102,15 +106,19 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 	}
 	if err := a.manager.SaveResource(resource); err != nil {
 		var msg = fmt.Sprintf("资源id= %s, Status =%s , ContainerID=%s  数据库写入失败", resource.ResourceID, resource.Status, resource.ContainerID)
+		log.Error("SaveResource Error",msg,"Error :",err.Error())
 		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
+	
+	log.Info("Resource Create Success , ResourceId=",resource.ResourceID," container id is ",resource.ContainerID)
 
 	w.Header().Set("content-type", "application/json")
 
 	w.WriteHeader(http.StatusCreated)
 	var data = map[string]interface{}{"Id": resource.ResourceID, "Warnings": []interface{}{}}
 	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Error("json.NewEncoder() Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -124,16 +132,16 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 
-	log.Infoln("inspect container ,resource id is " + data["name"])
-
 	var resource, err = a.manager.GetResource(data["name"])
 
 	if err != nil {
+		log.WithField("data[name]",data["name"]).Error("GetResource Error:",err.Error)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if resource == nil {
+		log.WithField("data[name]",data["name"]).Error("资源不存在")
 		http.Error(w, "No such resource "+data["name"], 404) //资源不存在
 		return
 	}
@@ -141,6 +149,7 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 	swarm, err := a._getSwarmClient()
 
 	if err != nil {
+		log.WithField("data[name]",data["name"]).Error("_getSwarmClient Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -149,16 +158,16 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 
 		containerInfo, err := swarm.InspectContainer(resource.ContainerID)
 		if err != nil {
+			log.WithField("containerId",resource.ContainerID).Error("swarm.InspectContainer Error:",err.Error())
 			http.Error(w, "resource存在，获得对应Container信息时出现错误。ContainerID = "+resource.ContainerID+" Error = "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(containerInfo); err != nil {
+			log.Error("Encoder Error :",err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		return
 	} else {
 		log.Infof("资源%s状态为%s", resource.ResourceID, resource.Status)
 		var data = map[string]string{"status": resource.Status}
@@ -166,24 +175,20 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 		if resource.Status == resourcing.Image {
 			data["description"] = "资源对应容器已经被镜像化，如需查看运行态的信息，请调用start之后，重试"
 			w.WriteHeader(449) //Retry With 请求应当在执行完适当的操作后进行重试
+			log.WithField("resourceId",resource.ResourceID).WithField("containerId",resource.ContainerID).Info("Status=img")
 		}
 		if resource.Status == resourcing.Moving {
 			data["description"] = "资源对应容器正在移动中，已被锁定，请稍后再试"
 			w.WriteHeader(423) //Locked 当前资源已被锁定
+			log.WithField("resourceId",resource.ResourceID).WithField("containerId",resource.ContainerID).Info("Status=moving")
 		}
 
 		if err := json.NewEncoder(w).Encode(data); err != nil {
+			log.Error("Encode Error",err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		return
 	}
-
-	var msg = fmt.Sprintf("%s对应的Resource Status字段值%s有误", resource.ResourceID, resource.Status)
-	log.Infoln(msg)
-	http.Error(w, msg, http.StatusInternalServerError)
-
-	return
 }
 
 // 启动容器
@@ -193,83 +198,91 @@ func (a *Api) inspectResource(w http.ResponseWriter, req *http.Request) {
 func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceID = data["name"]
+	
+	var cxtLog=log.WithField("resourceID",resourceID);
 
 	alreadyError := requniqueness.Handle("/startresource", resourceID) //持有当前资源，禁止其他请求并发再次持有
 	if alreadyError != nil {
-		log.Infoln(resourceID, "StartResource操作正在处理中")
+		cxtLog.Infoln(resourceID, "StartResource操作正在处理中")
 		w.Write([]byte("正在处理中，请稍候"))
 		return
 	}
 
 	defer requniqueness.Release("/startresource", resourceID)
 
-	log.Infoln("start container ,resource id is " + data["name"])
-
 	var resource, err = a.manager.GetResource(data["name"])
 	if err != nil {
+		cxtLog.Error("GetResource Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if resource == nil {
+		cxtLog.Error("No Such Resource")
 		http.Error(w, "No such resource "+resourceID, 404) //资源不存在
 		return
 	}
+	
+	cxtLog = cxtLog.WithField("containerID",resource.ContainerID)
 
 	swarm, err := a._getSwarmClient()
 
 	if err != nil {
+		cxtLog.Error("_getSwarmClient Error :",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if resource.Status == resourcing.Avaiable {
-		log.Infof("资源%s可用，将尝试启动", resource.ResourceID)
-		//转发到原生api上进行启动
+		cxtLog.Info("Status is Avaiable")
 		a._redirectToContainer(resource.ContainerID, w, req)
 		return
 	}
 
 	if resource.Status == resourcing.Image {
-		log.Infof("资源%s状态为%s", resource.ResourceID, resource.Status)
-		//根据imagename创建容器
+		cxtLog.Info("Status=image , now Create by image ",resource.Image)
 		containerid, err := a._createContainerByImage(swarm, resource.Image, resource.CreatingConfig)
 		if err != nil {
+			cxtLog.WithField("resource.Image",resource.Image).Error("_createContainerByImage Error:")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		dbResource, err := a.manager.GetResource(resource.ResourceID)
 		if err != nil {
+			cxtLog.Error("GetResource Error:",err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		
+		cxtLog=cxtLog.WithField("containerID",containerid)
 		dbResource.Status = resourcing.Avaiable
 		dbResource.ContainerID = containerid
 		dbResource.LastUpdateTime = time.Now().Local()
 		if err = a.manager.UpdateResource(dbResource.ResourceID, dbResource); err != nil {
+			cxtLog.Error("UpdateResource Error",err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
+		cxtLog.Info("redirect to start container")
+		
 		//容器创建成功之后，转发到原生的启动接口上
-		log.Infoln("开始启动容器->" + containerid)
 		a._redirectToContainer(containerid, w, req)
 		return
 	}
 
 	if resource.Status == resourcing.Moving {
 
-		log.Infof("资源%s状态为%s, 持续查询中", resource.ResourceID, resource.Status)
+		cxtLog.Infof("Status=moving,handle for wait moving.")
 		c_done := make(chan map[string]string)
 		go a.manager.WaitUntilResourceAvaiable(resourceID, (time.Duration(a.waitMovingTimeout) * time.Second), c_done)
 		done := <-c_done
 		if done["done"] != "true" {
-			log.Infof("资源%s等待movint->avaiable超时", resource.ResourceID)
+			cxtLog.Warn("handle for wait moving, time out")
 			http.Error(w, "资源处于Moving中，等待超 时 :"+done["error"], http.StatusInternalServerError)
 			return
 		} else {
-			log.Infof("资源%s状态已为avaiable, ContainerID = ", done["containerID"])
+			cxtLog.Infof("status changed : moving->avaiable")
 			a._redirectToContainer(done["containerID"], w, req)
 			return
 		}
@@ -277,17 +290,19 @@ func (a *Api) startResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var msg = fmt.Sprintf("%s对应的Resource Status字段值%s有误", resource.ResourceID, resource.Status)
-	log.Infoln(msg)
+	cxtLog.WithField("status",resource.Status).Error("status value error")
 	http.Error(w, msg, http.StatusInternalServerError)
 
 	return
 }
 
-//containers/xxx --->/containers/containerid
 func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, req *http.Request) {
+	var cxtLog=log.WithField("containerId",containerID);
+	
 	var err error
 	req.URL, err = url.ParseRequestURI(a.dUrl)
 	if err != nil {
+		cxtLog.WithField("a.dUrl",a.dUrl).Error("parseRequestURI Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -298,7 +313,8 @@ func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, re
 	}
 
 	req.RequestURI = strings.Join(segments, "/")
-	log.Debugln("转发至 " + req.Method + "   " + req.URL.String() + req.RequestURI)
+	
+	cxtLog.Info("REDIRECT  ",req.Method,":",req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
 
@@ -306,24 +322,32 @@ func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, re
 func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
-	log.Debugln("开始转发对" + req.RequestURI + "请求")
+	
+	var cxtLog=log.WithField("resourceId",resourceid)
+	
 	var resource, err = a.manager.GetResource(resourceid)
 	if err != nil {
+		cxtLog.Error("GetResource Error:",err.Error())
 		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusNotFound)
 		return
 	}
 	if resource == nil {
+		cxtLog.Error("Resource not found")
 		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
 		return
 	}
+	
+	cxtLog=cxtLog.WithField("containerID",resource.ContainerID)
 
 	if resource.Status != resourcing.Avaiable {
+		cxtLog.WithField("Status",resource.Status).Error("Resource不可用")
 		http.Error(w, "资源id="+resourceid+"对应的资源不可用，状态="+resource.Status+"，请确保客户端在Connect状态下进行操作", http.StatusForbidden)
 		return
 	}
 
 	req.URL, err = url.ParseRequestURI(a.dUrl)
 	if err != nil {
+		cxtLog.WithField("a.dUrl",a.dUrl).Error("ParseRequestUIR Error:",err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -335,93 +359,54 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	}
 
 	req.RequestURI = strings.Join(segments, "/")
-	log.Infoln("req.URL=", req.URL.String())
-	log.Infoln("req.ResuestURI=", req.RequestURI)
-	log.Infoln("转发至" + req.URL.String() + req.RequestURI)
+	
+	cxtLog.Info("REDIRECT ",req.Method,": ",req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
 
 func (a *Api) redirectToContainerHijack(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
-	log.Debugln("开始转发对" + req.RequestURI + "请求")
+	
+	var cxtLog=log.WithField("resourceId",resourceid)
+	
 	var resource, err = a.manager.GetResource(resourceid)
 	if err != nil {
+		cxtLog.Error("GetResource Error :",err.Error())
 		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusNotFound)
 		return
 	}
 	if resource == nil {
+		cxtLog.Error("Resource Not Found")
 		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
 		return
 	}
+	
+	cxtLog=cxtLog.WithField("containerID",resource.ContainerID)
 
 	if resource.Status != resourcing.Avaiable {
+		cxtLog.Error("资源不可用,Status =",resource.Status)
 		http.Error(w, "资源id="+resourceid+"对应的资源不可用，状态="+resource.Status+"，请确保客户端在Connect状态下进行操作", http.StatusForbidden)
 		return
 	}
-
-	// req.URL, err = url.ParseRequestURI(a.dUrl)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-
-	var segments []string = strings.Split(req.RequestURI, "/")
-	if len(segments) >= 3 {
-		segments[1] = "containers"
-		segments[2] = resource.ContainerID
-	}
-	log.Infoln("before req.ResuestURI=", req.RequestURI)
-	req.RequestURI = strings.Join(segments, "/")
-	log.Infoln("req.URL=", req.URL.String())
-	log.Infoln("req.ResuestURI=", req.RequestURI)
-	log.Infoln("转发至" + req.URL.String() + req.RequestURI)
-	req.URL,_=url.ParseRequestURI(req.RequestURI)
-	log.Infoln("req.URL=", req.URL.String())
-	//a.fwd.ServeHTTP(w, req)
-	log.Infof("%v",&req)
 	
+	req.RequestURI = replacePath(req.RequestURI,resource.ContainerID)
+	
+	req.URL.Path = replacePath(req.URL.Path,resource.ContainerID)
+	
+	//cxtLog.Info("req.URL.Path->",req.URL.Path) 
+	
+	cxtLog.Info("REDIRECT ",req.Method,": ",req.RequestURI)
 	a.swarmHijack(nil, a.dUrl, w, req)
 }
 
-
-const MAXCOUNT int = 3
-
-var count int = 0
-
-func (a *Api) _recursiveToStartContainer(docker *swarmclient.SwarmClient, containerid string) (*swarmclient.ContainerInfo, error) {
-
-	var baseerror = errors.New("StartContainer 出错,ContainerID=" + containerid)
-
-	var containerInfo, err = docker.InspectContainer(containerid)
-	if err != nil {
-		return nil, utils.Errors(baseerror, err)
+func replacePath(path string,ctId string) string {
+	var segments []string = strings.Split(path, "/")
+	if len(segments) >= 3 {
+		segments[1] = "containers"
+		segments[2] = ctId
 	}
-	if containerInfo.State.Running {
-		return containerInfo, nil
-	}
-
-	if count >= MAXCOUNT {
-		return nil, errors.New("容器尝试启动超过最大次数，启动失败")
-	}
-
-	if err := docker.StartContainer(containerid, nil); err != nil {
-		return nil, utils.Errors(baseerror, err)
-	}
-	log.Infof(" 第 %d次启动%s 容器", count+1, containerid)
-	count++
-
-	containerInfo, err = docker.InspectContainer(containerid)
-	if err != nil {
-		return nil, utils.Errors(baseerror, err)
-	}
-	if containerInfo.State.Running {
-		log.Infof("容器%s启动成功", containerid)
-		count = 0
-		return containerInfo, nil
-	} else {
-		return a._recursiveToStartContainer(docker, containerid)
-	}
+	return strings.Join(segments,"/")
 }
 
 func (a *Api) appendLocalRegistryToImageName(imageName string) (string, error) {
@@ -436,34 +421,28 @@ func (a *Api) appendLocalRegistryToImageName(imageName string) (string, error) {
 }
 
 func (a *Api) _createContainerByImage(swarm *swarmclient.SwarmClient, imageName string, creatingConfig *dockerclient.ContainerConfig) (string, error) {
-	//	var image, err = a.appendLocalRegistryToImageName(imageName) // 172.16.150.12:5000/nndtdx/workspaceName:commitid
-	//	if err != nil {
-	//		return "", nil
-	//	}
-	//	var image = imageName
-	//	var config = &dockerclient.ContainerConfig{
-	//		Image: image,
-	//	}
-	log.Debugln("creatingconfig-->")
-	log.Debugln(creatingConfig)
+	var cxtLog=log.WithField("imageName",imageName)
+	
+	cxtLog.Info("Now ,Create Container by image")
 
 	creatingConfig.Image = imageName
 
-	log.Infoln("开始从镜像" + imageName + "创建Container")
-	log.Debugln("create container by image , config->  :", creatingConfig)
-	containerid, err := swarm.CreateContainer(creatingConfig, "") //先在本地找，然后会根据指定的 ImageFullName 来在相应的Registry中Pul
+	containerid, err := swarm.CreateContainer(creatingConfig, "")
 	if err != nil {
+		cxtLog.Info("swarm.CreateContainer Error:",err.Error())
 		return "", err
 	}
-	log.Infof("容器创建成功，得到ContainerID=%s", containerid)
+	log.Info("Create Success,containerId = ", containerid)
 
 	return containerid, nil
-
 }
 
 func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
+	
+	var cxtLog=log.WithField("resourceId",resourceid)
+	
 	req.ParseForm()
 	v, force := false, false
 
@@ -477,72 +456,49 @@ func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
 	var resource, err = a.manager.GetResource(resourceid)
 
 	if err != nil {
+		cxtLog.Error("GetResource Error :",err.Error())
 		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusBadRequest)
 		return
 	}
 	if resource == nil {
+		cxtLog.Error("Resource Not Fount")
 		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
 		return
 	}
+	
+	cxtLog = cxtLog.WithField("containerID",resource.ContainerID)
 
 	if resource.Status == resourcing.Moving {
+		cxtLog.Warn("Status is moving ,cannot be deleted!")
 		w.WriteHeader(http.StatusAccepted) //如果是正在移动中该条数据不能立即删除!!
 		return
 	}
 
 	client, err := a._getSwarmClient()
 	if err != nil {
+		cxtLog.Error("_getSwarmClient Error :",err.Error())
 		http.Error(w, "a._getSwarmClient() Error : "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	cxtLog.Info("now, removing container")
 	//先删除容器
 	err = client.RemoveContainer(resource.ContainerID, force, v)
 	if err != nil {
-		log.Infoln(err)
+		cxtLog.Error("client.RemoveContainer force=",force," v=",v," Error: ",err.Error())
 		http.Error(w, "容器id="+resource.ContainerID+"删除失败: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	cxtLog.Info("now, removing resource db record")
 	//再删除资源
 	err = a.manager.DeleteResource(resourceid)
 	if err != nil {
+		cxtLog.Error("DeleteResource Error, resourceId =",resourceid," Error :",err.Error())
 		http.Error(w, "资源id="+resourceid+"删除失败: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Infoln("资源" + resourceid + "以及容器" + resource.ContainerID + "已删除")
-	w.WriteHeader(http.StatusNoContent)
-	return
-}
-
-func (a *Api) abandonContainer(w http.ResponseWriter, req *http.Request) {
-
-	var data = mux.Vars(req)
-	var resourceid = data["name"]
-	log.Infoln("放弃对资源" + resourceid + "的持有")
-	var resource, err = a.manager.GetResource(resourceid)
-	if err != nil {
-		http.Error(w, "资源id="+resourceid+"对应记录获取错误"+err.Error(), http.StatusNotFound)
-		return
-	}
-	if resource == nil {
-		http.Error(w, "资源id="+resourceid+"对应记录不存在"+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	swam, err := a._getSwarmClient()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = swam.StopContainer(resource.ContainerID, 0)
-	if err != nil {
-		http.Error(w, "StopContainer出现错误"+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("content-type", "application/json")
+	cxtLog.Info("Delete Success")
 	w.WriteHeader(http.StatusNoContent)
 	return
 }
@@ -573,8 +529,11 @@ type movingProgressInfo struct {
 func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceId = data["id"]
+	
+	var cxtLog=log.WithField("resourceId",resourceId).WithField("@Method","webide_api.go/moveResource")
+	
 	if resourceId == "" {
-		log.Error("客户端id参数错误，不能为空")
+		cxtLog.Error("request parameter resourceId should not be empty")
 		http.Error(w, fmt.Sprint("id参数不能为空"), http.StatusBadRequest) //moving ,wait
 		return
 	}
@@ -582,7 +541,7 @@ func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	var addr = req.FormValue("target")
 	if addr == "" {
-		log.Error("客户端target参数错误，不能为空")
+		cxtLog.Error("request parameter target should not be empty")
 		http.Error(w, fmt.Sprint("target参数不能为空"), http.StatusBadRequest)
 		return
 	}
@@ -600,6 +559,7 @@ func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if doing {
+		cxtLog.Warn(resourceId," is moving , please wait")
 		http.Error(w, "moving ,please wait", http.StatusAccepted) //moving ,wait
 		movingLocker.Unlock()
 		return
@@ -612,21 +572,23 @@ func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
 
 	movingLocker.Unlock()
 
-	log.Infoln("Moving Resource ", resourceId)
+	cxtLog.Infoln("Moving Resource ", resourceId)
 
 	var resource, err = a.manager.GetResource(resourceId)
 	if err != nil {
+		cxtLog.Error("GetResource resouceId=",resourceId,"Error :",err.Error())
 		http.Error(w, fmt.Sprintf("a.manager.GetResource(%s) Error %s", resourceId, err.Error()), http.StatusInternalServerError) //moving ,wait
 		return
 	}
 
 	if resource == nil {
+		cxtLog.Error("Resource Not Fount")
 		http.Error(w, fmt.Sprintf("%s 对应resource不存在", resourceId), http.StatusNotFound) //moving ,wait
 		return
 	}
 
 	if resource.Status == resourcing.Moving {
-		log.Warnf("检测到不一致数据。%s 缓存中无Moving，DB处于Moving状态。", resourceId)
+		cxtLog.Warnf("检测到不一致数据。%s 缓存中无Moving，DB处于Moving状态。", resourceId)
 		http.Error(w, fmt.Sprintf("检测到不一致数据。%s 缓存中无Moving，DB处于Moving状态。", resourceId), http.StatusInternalServerError) //moving ,wait
 		return
 	}
@@ -645,6 +607,8 @@ func (a *Api) moveResource(w http.ResponseWriter, req *http.Request) {
 
 //监控处理进度, 将 resourceId相关的处理信息收集到内存中
 func monitorProgress(resourceId string, progressCh chan string, endCh chan string, errorCh chan error) {
+	var cxtLog=log.WithField("resourceId",resourceId)
+	
 	var pCache, ok = movingProgressCache[resourceId]
 	if ok == false {
 		movingProgressCache[resourceId] = []*movingProgressInfo{}
@@ -660,14 +624,14 @@ func monitorProgress(resourceId string, progressCh chan string, endCh chan strin
 			}
 		case err := <-errorCh:
 			{
-				log.Infoln("收到moving resource Error 信号,resourceid=", resourceId)
+				cxtLog.Infoln("Moving Progress SIGNAL -> ERROR,resourceid=", resourceId," Error:",err.Error())
 				pCache = append(pCache, &movingProgressInfo{Time: time.Now(), Msg: err.Error(), Code: "error"})
 				movingProgressCache[resourceId] = pCache
 				goto END
 			}
 		case <-endCh:
 			{
-				log.Infoln("收到moving resource  end信号,resourceid=", resourceId)
+				cxtLog.Infoln("Moving Progress SIGNAL -> END,resourceid=", resourceId)
 				pCache = append(pCache, &movingProgressInfo{Time: time.Now(), Msg: "资源移动已完成", Code: "end"})
 				movingProgressCache[resourceId] = pCache
 				goto END
@@ -696,21 +660,27 @@ END:
 func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceId = data["id"]
+	var cxtLog=log.WithField("resourceId",resourceId).WithField("@Method","movingProgress")
 	infoes, ok := movingProgressCache[resourceId]
 	w.Header().Set("Content-Type", "application/json")
 	//不存在
 	if ok == false {
+		cxtLog.Info("progress is not in cache.")
 		dbResource, err := a.manager.GetResource(resourceId)
 		if err != nil {
+			cxtLog.Error()
 			http.Error(w, fmt.Sprintf("a.manager.GetResource(%s)", resourceId)+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		if dbResource == nil {
+			cxtLog.Error("resource not found")
 			http.Error(w, fmt.Sprintf("%s资源不存在", resourceId), http.StatusNotFound)
 			return
 		}
 
+		cxtLog.Info("Status=",dbResource.Status)
+		
 		if dbResource.Status == resourcing.Avaiable {
 			w.WriteHeader(200)
 			var info = []*movingProgressInfo{
@@ -719,6 +689,7 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 				}}
 			data, err := json.Marshal(info)
 			if err != nil {
+				cxtLog.Error("jsonMarshal Error: ",err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			w.Write([]byte(data))
@@ -733,6 +704,7 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 				}}
 			data, err := json.Marshal(info)
 			if err != nil {
+				cxtLog.Info("json.Marshall Error :",err.Error())
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			w.Write([]byte(data))
@@ -747,6 +719,7 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 				}}
 			data, err := json.Marshal(info)
 			if err != nil {
+				cxtLog.Error("json.Marshall Error :",err.Error())
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			w.Write([]byte(data))
@@ -756,6 +729,7 @@ func (a *Api) movingProgress(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(200)
 		data, err := json.Marshal(infoes)
 		if err != nil {
+			cxtLog.Error("json.Marshal Error:",err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		w.Write([]byte(data))
@@ -770,6 +744,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 	errorCh = make(chan error)
 	progressCh = make(chan string) //如果progress 缓冲区个数不为1,那么要确保再接受到end的时候，flush一下 progress.
 
+	var cxtLog=log.WithField("toAddr",toAddr).WithField("containerId",resource.ContainerID).WithField("@Method","_moveResourceAndUpdateDb")
+
 	go func() {
 
 		defer func() {
@@ -778,7 +754,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 				resource.Status = resourcing.Avaiable
 				err := a.manager.UpdateResource(resource.ResourceID, resource)
 				if err != nil {
-					log.Warn("_moveResourceAndUpdateDb defer 资源状态置位失败 ：", err.Error())
+					cxtLog.Warn("资源状态更新为可用时失败, UpdateResource Error :",err.Error())
 				}
 			}
 			//无论成功与否，均移除缓存内的标记
@@ -786,7 +762,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		}()
 
 		progressCh <- "开始移动资源"
-		log.Infoln("开始移动资源")
+		cxtLog.Infoln("开始移动资源")
 
 		resource.Status = resourcing.Moving
 		a.manager.UpdateResource(resource.ResourceID, resource)
@@ -794,11 +770,11 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		client, err := a._getSwarmClient()
 
 		progressCh <- "正在打包提交镜像"
-		log.Infoln("正在打包提交镜像")
+		cxtLog.Infoln("正在打包提交镜像")
 		err = client.StopContainer(resource.ContainerID, 60)
 		if err != nil {
 			progressCh <- "提交前停止容器出现错误： " + err.Error()
-			log.Error("提交前停止容器出现错误： " + err.Error())
+			cxtLog.Error("提交前停止容器出现错误： " + err.Error())
 			errorCh <- err
 			return
 		}
@@ -807,20 +783,20 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		var tag = fmt.Sprintf("%d", time.Now().Unix())
 		var coment = fmt.Sprintf("%s Moving 产生临时镜像", time.Now().String())
 		id, err := client.Commit(resource.ContainerID, nil, repo, tag, coment, "webide-moving", true)
-		log.Info("Moving 产生临时镜像 image id = ", id)
+		cxtLog.Info("Moving 产生临时镜像 image id = ", id)
 		if err != nil {
 			progressCh <- "提交镜像出现错误： " + err.Error()
-			log.Error("提交镜像出现错误： " + err.Error())
+			cxtLog.Error("提交镜像出现错误： " + err.Error())
 			errorCh <- err
 			return
 		}
 		progressCh <- "镜像打包完成，正在推送镜像"
-		log.Info("镜像打包完成，正在推送镜像  ", repo+":"+tag)
+		cxtLog.Info("镜像打包完成，正在推送镜像  ", repo+":"+tag)
 		var imgFullName = repo + ":" + tag
 		err = client.PushImage(repo, tag, nil)
 		if err != nil {
 			progressCh <- "推送镜像时出现错误： " + err.Error()
-			log.Error("推送镜像时出现错误： " + err.Error())
+			cxtLog.Error("推送镜像时出现错误： " + err.Error())
 			errorCh <- err
 			return
 		}
@@ -830,7 +806,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		nodeName, err := a.getNodeNameByNodeAddress(toAddr)
 		if err != nil {
 			progressCh <- "查找目标服务器时出现错误 "
-			log.Error("查找目标服务器时出现错误： " + err.Error())
+			cxtLog.Error("查找目标服务器时出现错误： " + err.Error())
 			errorCh <- err
 			return
 		}
@@ -838,19 +814,19 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			config.Labels = map[string]string{}
 		}
 		progressCh <- "推送完成，正在重建资源"
-		log.Info("推送完成，正在重建资源")
+		cxtLog.Info("推送完成，正在重建资源")
 		config.Labels["com.docker.swarm.constraints"] = fmt.Sprintf(`["node==%s"]`, nodeName) //指定目标服务器
 		newId, err := client.CreateContainer(config, "")
 		if err != nil {
 			progressCh <- "重建资源时出现错误：" + err.Error()
-			log.Errorf("resource %s Moving Fail.  Image Push Success , image full name is  %s , But Create Fail. %s", resource.ResourceID, config.Image, err.Error())
+			cxtLog.Errorf("resource %s Moving Fail.  Image Push Success , image full name is  %s , But Create Fail. %s", resource.ResourceID, config.Image, err.Error())
 			errorCh <- err
 			return
 		}
 
 		err = client.StartContainer(newId, nil)
 		if err != nil {
-			log.Error("资源创建成功，但无法启动。", err.Error())
+			cxtLog.Error("资源创建成功，但无法启动。", err.Error())
 			progressCh <- "资源创建成功，但无法启动。" + err.Error()
 			errorCh <- errors.New("资源创建成功，但无法启动。" + err.Error())
 			return
@@ -860,11 +836,11 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		log.Infoln("正在清理旧容器，并更新数据库")
 		err = client.RemoveContainer(resource.ContainerID, true, true)
 		if err != nil {
-			log.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
+			cxtLog.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
 		}
 
 		progressCh <- "资源重建成功，正在更新数据库"
-		log.Infoln("资源重建成功，正在更新数据库")
+		cxtLog.Infoln("资源重建成功，正在更新数据库")
 		resource.ContainerID = newId
 		resource.Status = resourcing.Avaiable
 
@@ -877,7 +853,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		}
 
 		progressCh <- "数据库更新完成，资源移动成功"
-		log.Infoln("移动操作成功,返回新的容器id为 ", newId)
+		cxtLog.Infoln("移动操作成功,返回新的容器id为 ", newId)
 		newIdCh <- newId
 
 		return
@@ -903,8 +879,11 @@ func removeMovingIdInCache(id string) {
 }
 
 func (a *Api) getNodeNameByNodeAddress(addr string) (name string, err error) {
+	var cxtLog=log.WithField("@Method","getNodeNameByNodeAddress").WithField("addr",addr)
+	
 	nodes, err := a.manager.Nodes()
 	if err != nil {
+		cxtLog.Error("a.manager.Nodes() Error :",err.Error())
 		return "", err
 	}
 	for _, n := range nodes {
@@ -913,6 +892,7 @@ func (a *Api) getNodeNameByNodeAddress(addr string) (name string, err error) {
 		}
 	}
 
+	cxtLog.Error("cannot find node name by addr")
 	return "", errors.New(fmt.Sprintf("没有找到%s的node name", addr))
 
 }

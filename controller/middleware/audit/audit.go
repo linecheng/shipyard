@@ -35,6 +35,11 @@ func getAuthUsername(r *http.Request) (string, error) {
 	return parts[0], nil
 }
 
+func getServerKey(r *http.Request) (string)  {
+	key := r.Header.Get("X-Service-Key")
+	return key
+}
+
 func filterURI(uri string) (string, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -55,8 +60,8 @@ func (a *Auditor) HandlerFuncWithNext(w http.ResponseWriter, r *http.Request, ne
 	skipAudit := false
 
 	user, err := getAuthUsername(r)
-	if err != nil {
-		log.Errorf("audit error: %s", err)
+	if err != nil && err==ErrNoUserInToken {
+		user=getServerKey(r)
 	}
 
 	path, err := filterURI(r.RequestURI)

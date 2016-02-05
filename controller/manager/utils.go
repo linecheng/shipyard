@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+	"errors"
 
 	"github.com/shipyard/shipyard"
+	r "github.com/dancannon/gorethink"
 )
 
 func getTLSConfig(caCert, sslCert, sslKey []byte) (*tls.Config, error) {
@@ -114,4 +116,75 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 	}
 
 	return nodes, nil
+}
+
+
+func dbExist(session *r.Session, dbName string) (bool, error) {
+	var (
+		dbList []string
+		res    *r.Cursor
+		err    error
+	)
+
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
+	res, err = r.DBList().Run(session)
+	if err = res.All(&dbList); err != nil {
+		return false, err
+	}
+
+	for _, item := range dbList {
+		if item == dbName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func tableExist(session *r.Session, dbName string, tableNames ...string) (map[string]bool, error) {
+
+	var (
+		tblList []string
+		err     error
+		cursor  *r.Cursor
+		res = make(map[string]bool, len(tableNames))
+	)
+
+	defer func() {
+		if cursor != nil {
+			cursor.Close()
+		}
+	}()
+
+	exist, err := dbExist(session, dbName)
+	if exist == false {
+		return res,  errors.New("db " + dbName + " not exist.")
+	}
+
+	cursor, err = r.DB(dbName).TableList().Run(session)
+	if err != nil {
+		return res, err
+	}
+
+	if err = cursor.All(&tblList); err != nil {
+		return res, err
+	}
+
+	for _, name := range tableNames {
+		var exi = false
+		for _, dbItem := range tblList {
+			if name == dbItem {
+				exi = true
+				break
+			}
+		}
+		
+		res[name]=exi
+	}
+
+	return res, nil
 }

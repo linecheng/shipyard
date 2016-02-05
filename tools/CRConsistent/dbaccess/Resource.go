@@ -9,6 +9,12 @@ import (
 
 func (dbaccess *DBAccess) ResourceList() ([]containerresourcing.ContainerResource, error) {
 	res, err := r.Table(table_resource).Run(dbaccess.idesession)
+	defer func(){
+		if res!=nil{
+			res.Close()
+		}
+	}()
+	
 	if err != nil {
 		return nil, errors.New("Run() Error: " + err.Error())
 	}

@@ -61,7 +61,7 @@ type (
 		store            *sessions.CookieStore
 		client           *dockerclient.DockerClient
 		disableUsageInfo bool
-		idesession       *r.Session
+		//idesession       *r.Session
 	}
 
 	ScaleResult struct {
@@ -130,30 +130,45 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 		Database: database,
 		AuthKey:  authKey,
 		MaxIdle:  10,
+		MaxOpen: 10,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.New("connect to db error : "+err.Error())
 	}
 
-	idesession, err2 := r.Connect(r.ConnectOpts{
-		Address:  addr,
-		Database: db_webide_backend,
-		AuthKey:  authKey,
-		MaxIdle:  10,
-	})
+	// idesession, err2 := r.Connect(r.ConnectOpts{
+	// 	Address:  addr,
+	// 	Database: db_webide_backend,
+	// 	AuthKey:  authKey,
+	// 	MaxIdle:  10,
+	// })
 
-	if err2 != nil {
-		return nil, err2
-	}
+	// if err2 != nil {
+	// 	return nil, err2
+	// }
 
 	log.Info("checking database")
-
-	r.DbCreate(database).Run(session)
+	
+	exist,err := dbExist(session,database)
+	if err!=nil{
+		return nil,errors.New("dbExist Error "+err.Error())
+	}
+	
+	if !exist{
+		log.Info(database+ " not exist , now create database")
+		_,err = r.DBCreate(database).RunWrite(session)
+		if err!=nil{
+			return nil, errors.New("r.DbCreate Error :"+err.Error())
+		}
+	}else{
+		log.Info(database +" is already existed .")
+	}
+	
 	m := &DefaultManager{
 		database:         database,
 		authKey:          authKey,
 		session:          session,
-		idesession:       idesession,
+		//idesession:       idesession,
 		authenticator:    authenticator,
 		store:            store,
 		client:           client,
@@ -162,7 +177,7 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 	}
 	m.initdb()
 	m.initWebIdeBackendDb()
-	m.init()
+	//m.init()//not send usage report
 	return m, nil
 }
 
@@ -181,14 +196,30 @@ func (m DefaultManager) StoreKey() string {
 func (m DefaultManager) initdb() {
 	// create tables if needed
 	tables := []string{tblNameConfig, tblNameEvents, tblNameAccounts, tblNameRoles, tblNameConsole, tblNameServiceKeys, tblNameRegistries, tblNameExtensions, tblNameWebhookKeys}
-	for _, tbl := range tables {
-		_, err := r.Table(tbl).Run(m.session)
-		if err != nil {
-			if _, err := r.Db(m.database).TableCreate(tbl).Run(m.session); err != nil {
+	
+	existMap,err := tableExist(m.session,m.database,tables...)
+	if err!=nil{
+		log.Fatalf("error check table exist : %s",err)
+		return 
+	}
+	
+	for tbl,exist :=range existMap{
+		if !exist{
+			log.Info("create table "+tbl)
+			if _, err := r.DB(m.database).TableCreate(tbl).RunWrite(m.session); err != nil {
 				log.Fatalf("error creating table: %s", err)
 			}
 		}
 	}
+	
+	// for _, tbl := range tables {
+	// 	_, err := r.Table(tbl).Run(m.session)
+	// 	if err != nil {
+	// 		if _, err := r.DB(m.database).TableCreate(tbl).Run(m.session); err != nil {
+	// 			log.Fatalf("error creating table: %s", err)
+	// 		}
+	// 	}
+	// }
 }
 
 func (m DefaultManager) init() error {
@@ -334,6 +365,11 @@ func (m DefaultManager) Events(limit int) ([]*shipyard.Event, error) {
 		t.Limit(limit)
 	}
 	res, err := t.Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -353,9 +389,15 @@ func (m DefaultManager) PurgeEvents() error {
 
 func (m DefaultManager) ServiceKey(key string) (*auth.ServiceKey, error) {
 	res, err := r.Table(tblNameServiceKeys).Filter(map[string]string{"key": key}).Run(m.session)
+	
+	defer func(){
+		if res!=nil{
+			res.Close()
+		}
+	}()
+	
 	if err != nil {
 		return nil, err
-
 	}
 	if res.IsNil() {
 		return nil, ErrServiceKeyDoesNotExist
@@ -369,6 +411,12 @@ func (m DefaultManager) ServiceKey(key string) (*auth.ServiceKey, error) {
 
 func (m DefaultManager) ServiceKeys() ([]*auth.ServiceKey, error) {
 	res, err := r.Table(tblNameServiceKeys).Run(m.session)
+	defer func(){
+		if res!=nil{
+			res.Close()
+		}
+	}()
+	
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +429,11 @@ func (m DefaultManager) ServiceKeys() ([]*auth.ServiceKey, error) {
 
 func (m DefaultManager) Accounts() ([]*auth.Account, error) {
 	res, err := r.Table(tblNameAccounts).OrderBy(r.Asc("username")).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -393,6 +446,11 @@ func (m DefaultManager) Accounts() ([]*auth.Account, error) {
 
 func (m DefaultManager) Account(username string) (*auth.Account, error) {
 	res, err := r.Table(tblNameAccounts).Filter(map[string]string{"username": username}).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 
@@ -458,6 +516,11 @@ func (m DefaultManager) SaveAccount(account *auth.Account) error {
 
 func (m DefaultManager) DeleteAccount(account *auth.Account) error {
 	res, err := r.Table(tblNameAccounts).Filter(map[string]string{"id": account.ID}).Delete().Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -539,7 +602,7 @@ func (m DefaultManager) NewAuthToken(username string, userAgent string) (*auth.A
 		tokens = append(tokens, token)
 	}
 	// delete token
-	if _, err := r.Table(tblNameAccounts).Filter(map[string]string{"username": username}).Filter(r.Row.Field("user_agent").Eq(userAgent)).Delete().Run(m.session); err != nil {
+	if _, err := r.Table(tblNameAccounts).Filter(map[string]string{"username": username}).Filter(r.Row.Field("user_agent").Eq(userAgent)).Delete().RunWrite(m.session); err != nil {
 		return nil, err
 	}
 	// add
@@ -599,7 +662,7 @@ func (m DefaultManager) ChangePassword(username, password string) error {
 		return err
 	}
 
-	if _, err := r.Table(tblNameAccounts).Filter(map[string]string{"username": username}).Update(map[string]string{"password": hash}).Run(m.session); err != nil {
+	if _, err := r.Table(tblNameAccounts).Filter(map[string]string{"username": username}).Update(map[string]string{"password": hash}).RunWrite(m.session); err != nil {
 		return err
 	}
 
@@ -610,9 +673,13 @@ func (m DefaultManager) ChangePassword(username, password string) error {
 
 func (m DefaultManager) WebhookKey(key string) (*dockerhub.WebhookKey, error) {
 	res, err := r.Table(tblNameWebhookKeys).Filter(map[string]string{"key": key}).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
-
 	}
 
 	if res.IsNil() {
@@ -631,6 +698,11 @@ func (m DefaultManager) WebhookKey(key string) (*dockerhub.WebhookKey, error) {
 
 func (m DefaultManager) WebhookKeys() ([]*dockerhub.WebhookKey, error) {
 	res, err := r.Table(tblNameWebhookKeys).OrderBy(r.Asc("image")).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -673,6 +745,11 @@ func (m DefaultManager) DeleteWebhookKey(id string) error {
 
 	}
 	res, err := r.Table(tblNameWebhookKeys).Get(key.ID).Delete().Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return err
 
@@ -737,6 +814,11 @@ func (m DefaultManager) AddRegistry(registry *shipyard.Registry) error {
 
 func (m DefaultManager) RemoveRegistry(registry *shipyard.Registry) error {
 	res, err := r.Table(tblNameRegistries).Get(registry.ID).Delete().Run(m.session)
+	defer func(){
+		if res!=nil{
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -752,6 +834,11 @@ func (m DefaultManager) RemoveRegistry(registry *shipyard.Registry) error {
 
 func (m DefaultManager) Registries() ([]*shipyard.Registry, error) {
 	res, err := r.Table(tblNameRegistries).OrderBy(r.Asc("name")).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -776,6 +863,11 @@ func (m DefaultManager) Registries() ([]*shipyard.Registry, error) {
 
 func (m DefaultManager) Registry(name string) (*shipyard.Registry, error) {
 	res, err := r.Table(tblNameRegistries).Filter(map[string]string{"name": name}).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 
@@ -808,6 +900,11 @@ func (m DefaultManager) CreateConsoleSession(c *shipyard.ConsoleSession) error {
 
 func (m DefaultManager) RemoveConsoleSession(c *shipyard.ConsoleSession) error {
 	res, err := r.Table(tblNameConsole).Get(c.ID).Delete().Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -821,6 +918,11 @@ func (m DefaultManager) RemoveConsoleSession(c *shipyard.ConsoleSession) error {
 
 func (m DefaultManager) ConsoleSession(token string) (*shipyard.ConsoleSession, error) {
 	res, err := r.Table(tblNameConsole).Filter(map[string]string{"token": token}).Run(m.session)
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}

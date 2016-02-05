@@ -15,8 +15,10 @@ func (a *Api) swarmRedirect(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	//log.Info("RequestURI ",req.RequestURI)
 	req.RequestURI = strings.TrimPrefix(req.RequestURI, "/origin")
-	log.Info("begin to redirect ", req.URL, req.RequestURI)
+	
+	log.Info("redirect ",req.Method," : ",req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
 }
 
