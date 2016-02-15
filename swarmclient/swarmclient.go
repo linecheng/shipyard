@@ -2,7 +2,7 @@ package swarmclient
 
 import (
 	"bytes"
-	"crypto/tls"
+	//"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/samalba/dockerclient"
@@ -16,17 +16,17 @@ type SwarmClient struct {
 	dockerclient.DockerClient
 }
 
-func NewSwarmClient(swarmUrl string, tlsConfig *tls.Config) (*SwarmClient, error) {
-	var docker, err = dockerclient.NewDockerClient(swarmUrl, tlsConfig)
+// func NewSwarmClient(swarmUrl string, tlsConfig *tls.Config) (*SwarmClient, error) {
+// 	var docker, err = dockerclient.NewDockerClient(swarmUrl, tlsConfig)
 
-	if err != nil {
-		return nil, err
-	}
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return &SwarmClient{
-		DockerClient: *docker,
-	}, nil
-}
+// 	return &SwarmClient{
+// 		DockerClient: *docker,
+// 	}, nil
+// }
 
 func NewSwarmClientByDockerClient(docker *dockerclient.DockerClient) *SwarmClient {
 	return &SwarmClient{DockerClient: *docker}

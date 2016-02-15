@@ -24,42 +24,11 @@ import (
 )
 
 /*
-
 所有对Container的操作都会进行一层Resource的封装
-
-
-
-webide对后端 集群 的操作
-
-    申请，连接，放弃，状态
-     ws/xx/container/apply
-     ws/xx/container/connect
-     ws/xx/container/abandon
-     ws/xx/container/status
-
-资源申请的时候，则有资源参数（Container Config）
-
-后端 Shipyard表 BackendResoures表
-ResourceID , ContainerID, Status , Image
-
-Apply后 返回的ContainerID， 生成ResourceID, Status= Active , Image=nil。 将ResouceID返回给 WebIDE.
-Connect向后端提供ResourceID, 后端对资源进行处理（如果停止则进行启动等），处理成功后，将 资源的详细信息返回。
-Abandon 向后端提供ResourceID, 后端将会对 Container执行停止等操作。
-Status 向后端提供ResourceID，后端取得该ResourceID对应的ContainerID，返回状态。
-
-对于新来的用户 ，进行apply即可，对于旧有用户，则进行connect操作， 后端自主来根据自己记录的Resource状态，进行相应的操作，或直接启动，或 先进行移动然后再启动，或先进行调度，然后pull,然后run .
-
 */
 
-//create 之后 start并且返回详细的Container信息，同时插入数据库 相应的数据
-//?name=xxx
-
 func (a *Api) _getSwarmClient() (*swarmclient.SwarmClient, error) {
-	_docker, err := dockerclient.NewDockerClient(a.dUrl, nil)
-	if err != nil {
-		log.Error("dockerclient.NewDockerClient 错误" + err.Error())
-		return nil, errors.New("getSwarmClient出现错误" + err.Error())
-	}
+	_docker := a.manager.DockerClient()
 	swarm := swarmclient.NewSwarmClientByDockerClient(_docker)
 	return swarm, nil
 }
