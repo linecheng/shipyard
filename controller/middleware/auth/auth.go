@@ -82,6 +82,8 @@ func (a *AuthRequired) handleRequest(w http.ResponseWriter, r *http.Request) err
 	if serviceKey != "" {
 		if err := a.manager.VerifyServiceKey(serviceKey); err == nil {
 			valid = true
+		}else{
+			logger.Errorf("VerifyServiceKey Error : %s",err.Error())
 		}
 	} else { // check for authHeader
 		authHeader := r.Header.Get("X-Access-Token")

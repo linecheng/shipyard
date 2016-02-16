@@ -632,6 +632,7 @@ func (m DefaultManager) VerifyAuthToken(username, token string) error {
 
 func (m DefaultManager) VerifyServiceKey(key string) error {
 	if _, err := m.ServiceKey(key); err != nil {
+		log.Errorf("m.ServiceKey Error , %s",err.Error())
 		return err
 	}
 	return nil
