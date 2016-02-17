@@ -1,0 +1,1 @@
+./main -D server --rethinkdb-addr 192.168.5.55:28015 -d tcp://182.92.192.64:2375 --registry 192.168.5.55:5000 1>shipyard.log 2>shipyard.err.log &
