@@ -305,7 +305,7 @@ func (m DefaultManager) ScaleContainer(id string, numInstances int) ScaleResult 
 			// clear hostname to get a newly generated
 			config.Hostname = ""
 			hostConfig := containerInfo.HostConfig
-			id, err := m.client.CreateContainer(config, "")
+			id, err := m.client.CreateContainer(config, "",nil)
 			if err != nil {
 				errChan <- err
 				return

@@ -62,7 +62,7 @@ func (a *Api) createResource(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	log.Infoln("begin to create Container")
-	containerid, err := swarm.CreateContainer(config, name)
+	containerid, err := swarm.CreateContainer(config, name,nil)
 	if err != nil {
 		log.Error("swarm.CreateContainer() Error :","name = ",name,err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -396,7 +396,7 @@ func (a *Api) _createContainerByImage(swarm *swarmclient.SwarmClient, imageName 
 
 	creatingConfig.Image = imageName
 
-	containerid, err := swarm.CreateContainer(creatingConfig, "")
+	containerid, err := swarm.CreateContainer(creatingConfig, "",nil)
 	if err != nil {
 		cxtLog.Info("swarm.CreateContainer Error:",err.Error())
 		return "", err
@@ -785,7 +785,7 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		progressCh <- "推送完成，正在重建资源"
 		cxtLog.Info("推送完成，正在重建资源")
 		config.Labels["com.docker.swarm.constraints"] = fmt.Sprintf(`["node==%s"]`, nodeName) //指定目标服务器
-		newId, err := client.CreateContainer(config, "")
+		newId, err := client.CreateContainer(config, "",nil)
 		if err != nil {
 			progressCh <- "重建资源时出现错误：" + err.Error()
 			cxtLog.Errorf("resource %s Moving Fail.  Image Push Success , image full name is  %s , But Create Fail. %s", resource.ResourceID, config.Image, err.Error())
