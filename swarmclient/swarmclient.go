@@ -10,6 +10,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"errors"
+)
+
+var (
+	ErrImageNotFound     = errors.New("Image not found")
+	ErrNotFound          = errors.New("Not found")
+	ErrConnectionRefused = errors.New("Cannot connect to the docker engine endpoint")
 )
 
 type SwarmClient struct {
@@ -45,6 +52,7 @@ func (client *SwarmClient) InspectContainer(id string) (*ContainerInfo, error) {
 	}
 	return info, nil
 }
+
 func (client *SwarmClient) doRequest(method string, path string, body []byte, headers map[string]string) ([]byte, error) {
 	b := bytes.NewBuffer(body)
 
@@ -80,10 +88,25 @@ func (client *SwarmClient) doStreamRequest(method string, path string, in io.Rea
 		if !strings.Contains(err.Error(), "connection refused") && client.TLSConfig == nil {
 			return nil, fmt.Errorf("%v. Are you trying to connect to a TLS-enabled daemon without TLS?", err)
 		}
+		if strings.Contains(err.Error(), "connection refused") {
+			return nil, ErrConnectionRefused
+		}
 		return nil, err
 	}
 	if resp.StatusCode == 404 {
-		return nil, dockerclient.ErrNotFound
+		defer resp.Body.Close()
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		if len(data) > 0 {
+			// check if is image not found error
+			if strings.Index(string(data), "No such image") != -1 {
+				return nil, ErrImageNotFound
+			}
+			return nil, errors.New(string(data))
+		}
+		return nil, ErrNotFound
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
