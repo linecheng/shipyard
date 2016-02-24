@@ -456,7 +456,7 @@ func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
 	err1 := client.RemoveContainer(resource.ContainerID, force, v)
 	
 	if err1 != nil {
-		if strings.Contains(err1.Error(),"no such id") {
+		if strings.Contains(err1.Error(),"no such id") || strings.Contains(err1.Error(),"not found") {// docker daemon -> no such id, swarm ->not found
 			cxtLog.Error("container seems not exist,  client.RemoveContainer force=", force, " v=", v, " Error: ", err1.Error())
 			goto DELETEDB
 		}
