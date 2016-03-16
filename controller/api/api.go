@@ -307,7 +307,7 @@ func (a *Api) Run() error {
 		},
 		"POST": {
 			"/auth":                         swarmRedirect,
-			"/commit":                       swarmRedirect,
+			"/commit":                       a.redirectToContainer,
 			"/build":                        swarmRedirect,
 			"/images/create":                swarmRedirect,
 			"/images/load":                  swarmRedirect,

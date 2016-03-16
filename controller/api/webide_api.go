@@ -292,6 +292,18 @@ func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, re
 func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
+	var replaceQueryStr=false
+	
+	if resourceid==""{
+		var err = req.ParseForm();
+		if err!=nil{
+			log.Error("ParseFrom Error ",err.Error())
+			http.Error(w, "from parse error", http.StatusInternalServerError)
+			return;
+		}
+		replaceQueryStr=true
+		resourceid= req.FormValue("container")
+	}
 
 	var cxtLog = log.WithField("resourceId", resourceid)
 
@@ -315,6 +327,7 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	query := req.URL.Query()
 	req.URL, err = url.ParseRequestURI(a.dUrl)
 	if err != nil {
 		cxtLog.WithField("a.dUrl", a.dUrl).Error("ParseRequestUIR Error:", err.Error())
@@ -322,13 +335,25 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var segments []string = strings.Split(req.RequestURI, "/")
-	if len(segments) >= 3 {
-		segments[1] = "containers"
-		segments[2] = resource.ContainerID
+	if replaceQueryStr==false{
+		var segments []string = strings.Split(req.RequestURI, "/")
+		if len(segments) >= 3 {
+			segments[1] = "containers"
+			segments[2] = resource.ContainerID
+		}
+	
+		req.RequestURI = strings.Join(segments, "/")		
+	}else{
+		var qI=strings.Index(req.RequestURI,"?")
+		if qI >0{
+			query.Set("container",resource.ContainerID);
+
+			var newURI=req.RequestURI[0:qI]+"?"+query.Encode()
+			cxtLog.Info("new Request URI is ",newURI)
+			req.RequestURI=newURI
+		}
 	}
 
-	req.RequestURI = strings.Join(segments, "/")
 
 	cxtLog.Info("REDIRECT ", req.Method, ": ", req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
