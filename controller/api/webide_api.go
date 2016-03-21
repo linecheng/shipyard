@@ -292,17 +292,17 @@ func (a *Api) _redirectToContainer(containerID string, w http.ResponseWriter, re
 func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceid = data["name"]
-	var replaceQueryStr=false
-	
-	if resourceid==""{
-		var err = req.ParseForm();
-		if err!=nil{
-			log.Error("ParseFrom Error ",err.Error())
+	var replaceQueryStr = false
+
+	if resourceid == "" {
+		var err = req.ParseForm()
+		if err != nil {
+			log.Error("ParseFrom Error ", err.Error())
 			http.Error(w, "from parse error", http.StatusInternalServerError)
-			return;
+			return
 		}
-		replaceQueryStr=true
-		resourceid= req.FormValue("container")
+		replaceQueryStr = true
+		resourceid = req.FormValue("container")
 	}
 
 	var cxtLog = log.WithField("resourceId", resourceid)
@@ -335,25 +335,24 @@ func (a *Api) redirectToContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if replaceQueryStr==false{
+	if replaceQueryStr == false {
 		var segments []string = strings.Split(req.RequestURI, "/")
 		if len(segments) >= 3 {
 			segments[1] = "containers"
 			segments[2] = resource.ContainerID
 		}
-	
-		req.RequestURI = strings.Join(segments, "/")		
-	}else{
-		var qI=strings.Index(req.RequestURI,"?")
-		if qI >0{
-			query.Set("container",resource.ContainerID);
 
-			var newURI=req.RequestURI[0:qI]+"?"+query.Encode()
-			cxtLog.Info("new Request URI is ",newURI)
-			req.RequestURI=newURI
+		req.RequestURI = strings.Join(segments, "/")
+	} else {
+		var qI = strings.Index(req.RequestURI, "?")
+		if qI > 0 {
+			query.Set("container", resource.ContainerID)
+
+			var newURI = req.RequestURI[0:qI] + "?" + query.Encode()
+			cxtLog.Info("new Request URI is ", newURI)
+			req.RequestURI = newURI
 		}
 	}
-
 
 	cxtLog.Info("REDIRECT ", req.Method, ": ", req.RequestURI)
 	a.fwd.ServeHTTP(w, req)
@@ -456,7 +455,7 @@ func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if resource == nil {
-		cxtLog.Error("Resource Not Fount")
+		cxtLog.Error("Resource Not Found")
 		http.Error(w, "资源id="+resourceid+"对应记录不存在", http.StatusNotFound)
 		return
 	}
@@ -479,13 +478,13 @@ func (a *Api) deleteContainer(w http.ResponseWriter, req *http.Request) {
 	cxtLog.Info("now, removing container")
 	//先删除容器
 	err1 := client.RemoveContainer(resource.ContainerID, force, v)
-	
+
 	if err1 != nil {
-		if strings.Contains(err1.Error(),"no such id") || strings.Contains(err1.Error(),"not found") {// docker daemon -> no such id, swarm ->not found
+		if strings.Contains(err1.Error(), "no such id") || strings.Contains(err1.Error(), "not found") { // docker daemon -> no such id, swarm ->not found
 			cxtLog.Error("container seems not exist,  client.RemoveContainer force=", force, " v=", v, " Error: ", err1.Error())
 			goto DELETEDB
 		}
-		
+
 		cxtLog.Error("client.RemoveContainer force=", force, " v=", v, " Error: ", err1.Error())
 		http.Error(w, "容器id="+resource.ContainerID+"删除失败: "+err1.Error(), http.StatusInternalServerError)
 		return
@@ -899,4 +898,129 @@ func (a *Api) getNodeNameByNodeAddress(addr string) (name string, err error) {
 	cxtLog.Error("cannot find node name by addr")
 	return "", errors.New(fmt.Sprintf("没有找到%s的node name", addr))
 
+}
+
+var (
+    pendingToImaging=make(map[string]bool, 5)
+    imagingLocker sync.RWMutex
+)
+//容器镜像化
+func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
+    var (
+        err error
+    )
+	var data = mux.Vars(req)
+	var resourceId = data["name"]
+
+    var cxtLog = log.WithField("resourceId", resourceId)
+    
+    imagingLocker.Lock()
+    if _,ok:=pendingToImaging[resourceId];ok==true{
+        cxtLog.Warn("container is pending ,please wait....")
+        w.Header().Set("Content-Type","text/plain;charset=utf-8")
+        w.WriteHeader(http.StatusAccepted)
+        fmt.Fprint(w,"Container is pending,please wait...")
+        imagingLocker.Unlock()
+        return
+    }
+    
+    pendingToImaging[resourceId]=true
+    imagingLocker.Unlock()
+    defer func(){
+       delete(pendingToImaging,resourceId)
+    }()
+
+	client,err := a._getSwarmClient()
+    if err!=nil{
+        cxtLog.Error("get swarm client error :"+err.Error())
+		http.Error(w, "get swarm client error :"+err.Error(), http.StatusBadRequest)
+		return
+    }
+
+	resource, err := a.manager.GetResource(resourceId)
+	if err != nil {
+		cxtLog.Error("GetResource Error :", err.Error())
+		http.Error(w, "资源id="+resourceId+"对应记录获取错误"+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if resource == nil {
+		cxtLog.Error("Resource not found")
+		http.Error(w, "资源id="+resourceId+"对应记录不存在", http.StatusNotFound)
+		return
+	}
+
+	cxtLog = cxtLog.WithField("containerID", resource.ContainerID)
+
+	if resource.Status == resourcing.Moving {
+		cxtLog.Warn("Status is Moving, cannot be imaging")
+		w.WriteHeader(http.StatusBadRequest)
+        
+		w.Write([]byte("resource is moving ,cannot be imaging"))
+		return
+	}
+
+	if resource.Status == resourcing.Image {
+		cxtLog.Warn("Status is imaging,there is no need to do again")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Status is imaging,there is no need to do again"))
+		return
+	}
+
+	var containerID = resource.ContainerID
+	info, err := client.InspectContainer(containerID)
+	if info ==nil || err == dockerclient.ErrNotFound {
+		cxtLog.Warn("resource found , container is not found error :"+err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("resource found, container is not found"))
+		return
+	}
+
+	var repo = a.registryAddr + "/webide-image" + info.Name
+	var tag = fmt.Sprintf("%d",time.Now().Unix())
+	_, err = client.Commit(containerID, info.Config, repo, tag, "image by shipyard", "shipyard", true)
+	if err != nil {
+		cxtLog.Error("commit error :" + err.Error())
+		http.Error(w, "commit error :"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var imgName = repo + ":" + tag
+	cxtLog.Info("begin push image " + imgName)
+	var begin = time.Now()
+	err = client.PushImage(repo, tag, nil)
+	if err != nil {
+		cxtLog.Error("push error:" + err.Error())
+		http.Error(w, "push error:"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var t = time.Now().Sub(begin).Seconds()
+	cxtLog.Infof(" push success "+imgName+" 耗时 %.2f 秒", t)
+
+	resource.Status = resourcing.Image
+	resource.Image = imgName
+	err = a.manager.UpdateResource(resourceId, resource)
+	if err != nil {
+		cxtLog.Error("update db error " + err.Error())
+		http.Error(w, "update db error "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = client.RemoveContainer(containerID, true, true)
+	if err != nil {
+		cxtLog.Error("remove container error " + err.Error())
+		http.Error(w, "remove container error "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = client.RemoveImage(imgName, true)
+	if err != nil {
+		cxtLog.Error("remove image error " + err.Error())
+		http.Error(w, "remove image error "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+    cxtLog.Info("resource image success.")
+    w.WriteHeader(http.StatusOK)
+    w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+    fmt.Fprint(w,"OK")
 }

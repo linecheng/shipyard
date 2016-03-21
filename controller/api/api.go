@@ -314,6 +314,7 @@ func (a *Api) Run() error {
 			"/images/{name:.*}/push":        swarmRedirect,
 			"/images/{name:.*}/tag":         swarmRedirect,
 			"/containers/create":            a.createResource, //swarmRedirect,
+            "/containers/{name:.*}/imaging": a.imagingContainer,
 			"/containers/{name:.*}/kill":    a.redirectToContainer,
 			"/containers/{name:.*}/pause":   a.redirectToContainer,
 			"/containers/{name:.*}/unpause": a.redirectToContainer,
