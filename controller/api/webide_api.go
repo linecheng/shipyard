@@ -933,7 +933,7 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 	client,err := a._getSwarmClient()
     if err!=nil{
         cxtLog.Error("get swarm client error :"+err.Error())
-		http.Error(w, "get swarm client error :"+err.Error(), http.StatusBadRequest)
+		http.Error(w, "get swarm client error :"+err.Error(), http.StatusInternalServerError)
 		return
     }
 
@@ -971,7 +971,7 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 	info, err := client.InspectContainer(containerID)
 	if info ==nil || err == dockerclient.ErrNotFound {
 		cxtLog.Warn("resource found , container is not found error :"+err.Error())
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("resource found, container is not found"))
 		return
 	}
