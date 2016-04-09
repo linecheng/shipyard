@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
 	"github.com/mailgun/oxy/utils"
 )
 
@@ -92,7 +91,46 @@ func New(setters ...optSetter) (*Forwarder, error) {
 
 func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	start := time.Now().UTC()
-	response, err := f.roundTripper.RoundTrip(f.copyRequest(req, req.URL))
+	var newReq = f.copyRequest(req, req.URL)
+
+	var (
+		writeComplete  = make(chan bool)
+		dectedComplete = make(chan bool)
+	)
+
+	go func() {
+        //fmt.Println("sh.............")
+		var (
+			closeNotifier http.CloseNotifier
+			ok            bool
+		)
+
+		type canceler interface {
+			CancelRequest(*http.Request)
+		}
+
+		if closeNotifier, ok = w.(http.CloseNotifier); ok == false {
+			f.log.Errorf("not a notifier")
+			return
+		}
+
+		select {
+		case <-closeNotifier.CloseNotify():
+			{
+				if canc, ok := f.roundTripper.(canceler); ok {
+                    //fmt.Println("check close .")
+					canc.CancelRequest(newReq)
+					dectedComplete <- true
+				}
+
+			}
+		case <-writeComplete:
+			break
+		}
+
+	}()
+
+	response, err := f.roundTripper.RoundTrip(newReq)
 	if err != nil {
 		f.log.Errorf("Error forwarding to %v, err: %v", req.URL, err)
 		f.errHandler.ServeHTTP(w, req, err)
@@ -117,6 +155,14 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if written != 0 {
 		w.Header().Set(ContentLength, strconv.FormatInt(written, 10))
 	}
+
+	select {
+	case <-dectedComplete:
+		break
+	case writeComplete <- true:
+		break
+	}
+
 	response.Body.Close()
 }
 
