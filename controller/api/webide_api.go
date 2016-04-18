@@ -840,12 +840,12 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		log.Infoln("正在清理旧容器，并更新数据库")
 		err = client.RemoveContainer(resource.ContainerID, true, true)
 		if err != nil {
-			cxtLog.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
+			cxtLog.Warnf("移动资源后，清理旧容器出现错误，containerid = %s Error = %s",resource.ContainerID,err.Error())
 		}
         
-       _, err =client.RemoveImage(imgFullName,true)
+       _, err =client.RemoveImage(imgFullName,false)
         if err!=nil{
-            cxtLog.Warnf("移动资源后，清理旧镜像出现错误，containerid = %s Image = %s", resource.ContainerID,imgFullName)
+            cxtLog.Warnf("移动资源后，清理旧镜像出现错误，containerid = %s Image = %s Error = %s", resource.ContainerID,imgFullName,err.Error())
         }
 
 		progressCh <- "资源重建成功，正在更新数据库"
