@@ -763,7 +763,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			//无论成功与否，均移除缓存内的标记
 			removeMovingIdInCache(resource.ResourceID)
 		}()
-
+        
+        var begin=time.Now()
 		progressCh <- "开始移动资源"
 		cxtLog.Infoln("开始移动资源")
 
@@ -841,6 +842,11 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		if err != nil {
 			cxtLog.Warn("移动资源后，清理旧容器出现错误，containerid = " + resource.ContainerID)
 		}
+        
+       _, err =client.RemoveImage(imgFullName,true)
+        if err!=nil{
+            cxtLog.Warnf("移动资源后，清理旧镜像出现错误，containerid = %s Image = %s", resource.ContainerID,imgFullName)
+        }
 
 		progressCh <- "资源重建成功，正在更新数据库"
 		cxtLog.Infoln("资源重建成功，正在更新数据库")
@@ -854,6 +860,9 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			log.Error("资源重建后更新数据库标识出错，Error : " + err.Error())
 			return
 		}
+        
+        var t = time.Now().Sub(begin).Seconds()
+        cxtLog.Infof(" Move Resource Success "+resource.ResourceID+" 耗时 %.2f 秒", t)
 
 		progressCh <- "数据库更新完成，资源移动成功"
 		cxtLog.Infoln("移动操作成功,返回新的容器id为 ", newId)
