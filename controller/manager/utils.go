@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"errors"
+    "fmt"
 
 	"github.com/shipyard/shipyard"
 	r "github.com/dancannon/gorethink"
@@ -44,6 +45,7 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 	nodeComplete := false
 	name := ""
 	addr := ""
+    weight:= "N/A"
 	containers := ""
 	containersTotalAndStart := ""
 	reservedCPUs := ""
@@ -52,7 +54,7 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 	reservedMemoryOnlyStart := ""
 	labels := []string{}
 	for _, l := range driverStatus {
-		if len(l) != 2 {
+		if len(l) < 2 {
 			continue
 		}
 		label := l[0]
@@ -66,6 +68,10 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 		if strings.Index(label, " └") == -1 {
 			name = label
 			addr = data
+            fmt.Printf("label %s len=%d ",label,len(l))
+            if len(l)>=3{
+                weight =l[2]
+            }
 		}
 
 		// node info like "Containers"
@@ -101,6 +107,7 @@ func parseClusterNodes(driverStatus [][]string) ([]*shipyard.Node, error) {
 				ReservedCPUsOnlyStart:   reservedCPUsOnlyStart,
 				ReservedMemoryOnlyStart: reservedMemoryOnlyStart,
 				Labels:                  labels,
+                Weight:                  weight,
 			}
 			nodes = append(nodes, node)
 

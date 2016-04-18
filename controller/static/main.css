@@ -81,3 +81,34 @@ i.terminal {
     color: #000000;
     opacity: 0.8;
 }
+
+span.color-span{
+    border-radius: 4px;
+    padding: 4px;
+    display: inline-block;
+    min-width: 65px;
+}
+
+span.color-span.success{
+    background-color: #5cb85c;
+    border-color: #4cae4c;
+    color: #fff;
+}
+
+span.color-span.info{
+    background-color: #5bc0de;
+    border-color: #46b8da;
+    color: #fff;
+}
+
+span.color-span.danger{
+    background-color: #d9534f;
+    border-color: #d43f3a;
+    color: #fff;
+}
+
+span.color-span.warning{
+    background-color: #f0ad4e;
+    border-color: #eea236;
+    color: #fff;
+}

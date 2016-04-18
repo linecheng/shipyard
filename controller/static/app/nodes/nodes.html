@@ -49,6 +49,7 @@
 	    <th>Reserved CPUs Only Start</th>
                     <th>Reserved Memory Only Start</th>
                     <th>Labels</th>
+                    <th>状态/权值</th>
                 </tr>
             </thead>
             <tbody>
@@ -62,6 +63,8 @@
 	     <td>{{n.reserved_cpus_onlystart}}</td>
                     <td>{{n.reserved_memory_onlystart}}</td>
                     <td>{{n.labels.join(', ')}}</td>
+                    <td><span class='color-span' ng-class="n.weight == '0' ? 'danger' : n.weight == '-1' ? 'info' : 'success'" >
+                        {{vm.nodeStatus(n)}}</span></td>
                 </tr>
             </tbody>
         </table>

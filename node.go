@@ -12,4 +12,5 @@ type Node struct {
 	ReservedMemoryOnlyStart string   `json:"reserved_memory_onlystart,omitempty"`
 	Labels                  []string `json:"labels,omitempty"`
 	ResponseTime            float64  `json:"response_time" gorethink:"response_time,omitempty"`
+    Weight                   string  `json:"weight,omitempty"`
 }

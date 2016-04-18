@@ -13,6 +13,19 @@
             vm.removeNode = removeNode;
             vm.showRemoveNodeDialog = showRemoveNodeDialog;
             vm.selectedNode = null;
+            
+            vm.nodeStatus=function(n){
+                var weight=n.weight;
+                if(weight=="-1"){
+                    return "备用/-1"
+                }
+                
+                if(weight=="0"){
+                    return "将移除/0"
+                }
+                
+                return "正常/"+weight
+            }
 
             function showRemoveNodeDialog(node) {
                 vm.selectedNode = node;
