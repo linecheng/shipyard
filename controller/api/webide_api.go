@@ -827,14 +827,15 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			errorCh <- err
 			return
 		}
-
-		err = client.StartContainer(newId, nil)
-		if err != nil {
-			cxtLog.Error("资源创建成功，但无法启动。", err.Error())
-			progressCh <- "资源创建成功，但无法启动。" + err.Error()
-			errorCh <- errors.New("资源创建成功，但无法启动。" + err.Error())
-			return
-		}
+        
+        //move后不需要启动
+		// err = client.StartContainer(newId, nil)
+		// if err != nil {
+		// 	cxtLog.Error("资源创建成功，但无法启动。", err.Error())
+		// 	progressCh <- "资源创建成功，但无法启动。" + err.Error()
+		// 	errorCh <- errors.New("资源创建成功，但无法启动。" + err.Error())
+		// 	return
+		// }
 
 		progressCh <- "清理旧容器，并更新数据库"
 		log.Infoln("正在清理旧容器，并更新数据库")
