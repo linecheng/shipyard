@@ -77,14 +77,29 @@ func NewApi(config ApiConfig) (*Api, error) {
 	}, nil
 }
 
+type fwdLogger struct{
+}
+
+func(fl *fwdLogger) Infof(format string, args ...interface{}){
+    log.Infof(format,args...)   
+}
+func(fl *fwdLogger) Warningf(format string, args ...interface{}){
+    log.Warningf(format,args...)   
+}
+func(fl *fwdLogger) Errorf(format string, args ...interface{}){
+    log.Errorf(format,args...)  
+}
+
 func (a *Api) Run() error {
 	globalMux := http.NewServeMux()
 	controllerManager := a.manager
 	client := a.manager.DockerClient()
 
 	// forwarder for swarm
+    
 	var err error
-	a.fwd, err = forward.New()
+	a.fwd, err = forward.New(forward.Logger(&fwdLogger{}))
+    
 	if err != nil {
 		return err
 	}
