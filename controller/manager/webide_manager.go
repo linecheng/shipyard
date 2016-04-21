@@ -67,6 +67,7 @@ func (m DefaultManager) SaveResource(res *resource.ContainerResource) error {
 	return err
 }
 func (m DefaultManager) UpdateResource(resourceid string, res *resource.ContainerResource) error {
+    res.LastUpdateTime=time.Now()
 	_, err := r.DB(db_webide_backend).Table(table_resource).Filter(map[string]string{"ResourceID": resourceid}).Update(res).RunWrite(m.session)
 	if err != nil {
 		return errors.New("resourceid = " + resourceid + err.Error())

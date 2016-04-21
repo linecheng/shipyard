@@ -95,6 +95,7 @@ func (client *DockerClient) doStreamRequest(method string, path string, in io.Re
 	if (method == "POST" || method == "PUT") && in == nil {
 		in = bytes.NewReader(nil)
 	}
+    fmt.Printf("docker client do request:  %s %s \n",method,client.URL.String()+path)
 	req, err := http.NewRequest(method, client.URL.String()+path, in)
 	if err != nil {
 		return nil, err

@@ -101,7 +101,7 @@
                         <th>ContainerID</th>
                         <th>Node</th>
                         <th>Container Name</th>
-                        <th>Image</th>
+                        <th title="container's or imaging image">Image</th>
                         <th>Container Status</th>
                         <th>Resource Status</th>
                         <th>Create Time</th>
@@ -129,7 +129,7 @@
                         </td>
                         <td>{{vm.nodeName(c.Container)}}</td>
                         <td>{{vm.containerName(c.Container)}}</td>
-                        <td>{{c.Container==undefined?'-':c.Container.Image }}</td>
+                        <td>{{c.Status=='image'?c.Image:(c.Container==undefined?'-':c.Container.Image) }}</td>
                         <td>{{c.Container==undefined?'-':c.Container.Status }}</td>
                         <td>{{c.Status}}</td>
                         <td>{{c.CreateTime }}</td>

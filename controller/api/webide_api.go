@@ -922,7 +922,8 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 	var data = mux.Vars(req)
 	var resourceId = data["name"]
 
-    var cxtLog = log.WithField("resourceId", resourceId)
+    var cxtLog = log.WithField("resourceId", resourceId).WithField("Action","Imaging")
+    cxtLog.Info("resource imaging begin.")
     
     imagingLocker.Lock()
     if _,ok:=pendingToImaging[resourceId];ok==true{
@@ -1009,27 +1010,30 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	resource.Status = resourcing.Image
 	resource.Image = imgName
+    resource.ContainerID=""
+    resource.LastUpdateTime=time.Now()
 	err = a.manager.UpdateResource(resourceId, resource)
 	if err != nil {
 		cxtLog.Error("update db error " + err.Error())
 		http.Error(w, "update db error "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	err = client.RemoveContainer(containerID, true, true)
+    cxtLog.Info("update resource ok ,will clean container and image ")
+	err = client.RemoveContainer(containerID, false,false)
 	if err != nil {
 		cxtLog.Error("remove container error " + err.Error())
 		http.Error(w, "remove container error "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+    cxtLog.Info("remove old container ok")
 	_, err = client.RemoveImage(imgName, true)
 	if err != nil {
 		cxtLog.Error("remove image error " + err.Error())
 		http.Error(w, "remove image error "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-    cxtLog.Info("resource image success.")
+    cxtLog.Infof("remove tmp image %s ok",imgName)
+    cxtLog.Info("resource imaging success.")
     w.WriteHeader(http.StatusOK)
     w.Header().Set("Content-Type", "text/plain; charset=utf-8")
     fmt.Fprint(w,"OK")

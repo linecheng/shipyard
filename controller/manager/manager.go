@@ -131,6 +131,9 @@ func NewManager(addr string, database string, authKey string, client *dockerclie
 		AuthKey:  authKey,
 		MaxIdle:  10,
 		MaxOpen: 10,
+        Timeout:30*time.Second,
+        ReadTimeout:30*time.Second,
+        WriteTimeout:30*time.Second,
 	})
 	if err != nil {
 		return nil, errors.New("connect to db error : "+err.Error())
