@@ -397,6 +397,7 @@ func (a *Api) Run() error {
 
 	var resourceRouter = mux.NewRouter()
 	resourceRouter.HandleFunc("/resources/list", a.resources).Methods("GET")
+    resourceRouter.HandleFunc("/resources/{id}", a.resource).Methods("GET")
 	resourceRouter.HandleFunc("/resources/{id}", a.deleteResource).Methods("DELETE")
 	resourceRouter.HandleFunc("/resources/{id}/move", a.moveResource).Methods("POST")
 	resourceRouter.HandleFunc("/resources/{id}/movingprogress", a.movingProgress).Methods("GET")
