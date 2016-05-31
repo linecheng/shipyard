@@ -24,7 +24,7 @@ func (a *Api) resources(w http.ResponseWriter, r *http.Request) {
 
 func (a *Api) resource(w http.ResponseWriter,r *http.Request){
     w.Header().Set("content-type","application/json")
-    vars := mux.Vars(r0)
+    vars := mux.Vars(r)
     var resourceId=vars["id"]
     if resourceId==""{
         http.Error(w,"resource id 参数缺失",http.StatusBadRequest)
@@ -47,7 +47,7 @@ func (a *Api) resource(w http.ResponseWriter,r *http.Request){
         cxtLog.Errorf("400 %s",msg)
     }
     
-    if err :=json.NewEncoder(w).Encode(msg);err!=nil{
+    if err :=json.NewEncoder(w).Encode(model);err!=nil{
 		http.Error(w, "json encoder error :" + err.Error(), http.StatusInternalServerError)
         cxtLog.Errorf("500 json encoder error :"+err.Error())
 		return

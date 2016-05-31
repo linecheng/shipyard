@@ -998,6 +998,7 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	var imgName = repo + ":" + tag
 	cxtLog.Info("begin push image " + imgName)
+    time.Sleep(5*time.Second)//wait cluster to refresh all images
 	var begin = time.Now()
 	err = client.PushImage(repo, tag, nil)
 	if err != nil {
