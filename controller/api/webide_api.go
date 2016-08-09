@@ -981,7 +981,6 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	var containerID = resource.ContainerID
 	info, err := client.InspectContainer(containerID)
-	var oldImg = info.Config.Image
 	if info == nil || err == dockerclient.ErrNotFound {
 		cxtLog.Warn("resource found , container is not found error :" + err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -1030,10 +1029,6 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 	_, err = client.RemoveImage(imgName, false)
 	if err != nil {
 		cxtLog.Warn("remove image error " + err.Error())
-	}
-	_, err = client.RemoveImage(oldImg, false)
-	if err != nil {
-		cxtLog.Warn("remove old image error " + err.Error())
 	}
 
 	cxtLog.Infof("remove tmp image %s ok", imgName)
