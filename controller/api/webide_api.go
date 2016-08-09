@@ -763,8 +763,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			//无论成功与否，均移除缓存内的标记
 			removeMovingIdInCache(resource.ResourceID)
 		}()
-        
-        var begin=time.Now()
+
+		var begin = time.Now()
 		progressCh <- "开始移动资源"
 		cxtLog.Infoln("开始移动资源")
 
@@ -827,8 +827,8 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			errorCh <- err
 			return
 		}
-        
-        //move后不需要启动
+
+		//move后不需要启动
 		// err = client.StartContainer(newId, nil)
 		// if err != nil {
 		// 	cxtLog.Error("资源创建成功，但无法启动。", err.Error())
@@ -841,13 +841,13 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 		log.Infoln("正在清理旧容器，并更新数据库")
 		err = client.RemoveContainer(resource.ContainerID, true, true)
 		if err != nil {
-			cxtLog.Warnf("移动资源后，清理旧容器出现错误，containerid = %s Error = %s",resource.ContainerID,err.Error())
+			cxtLog.Warnf("移动资源后，清理旧容器出现错误，containerid = %s Error = %s", resource.ContainerID, err.Error())
 		}
-        
-       _, err =client.RemoveImage(imgFullName,false)
-        if err!=nil{
-            cxtLog.Warnf("移动资源后，清理旧镜像出现错误，containerid = %s Image = %s Error = %s", resource.ContainerID,imgFullName,err.Error())
-        }
+
+		_, err = client.RemoveImage(imgFullName, false)
+		if err != nil {
+			cxtLog.Warnf("移动资源后，清理旧镜像出现错误，containerid = %s Image = %s Error = %s", resource.ContainerID, imgFullName, err.Error())
+		}
 
 		progressCh <- "资源重建成功，正在更新数据库"
 		cxtLog.Infoln("资源重建成功，正在更新数据库")
@@ -861,9 +861,9 @@ func (a *Api) _moveResourceAndUpdateDb(resource *resourcing.ContainerResource, t
 			log.Error("资源重建后更新数据库标识出错，Error : " + err.Error())
 			return
 		}
-        
-        var t = time.Now().Sub(begin).Seconds()
-        cxtLog.Infof(" Move Resource Success "+resource.ResourceID+" 耗时 %.2f 秒", t)
+
+		var t = time.Now().Sub(begin).Seconds()
+		cxtLog.Infof(" Move Resource Success "+resource.ResourceID+" 耗时 %.2f 秒", t)
 
 		progressCh <- "数据库更新完成，资源移动成功"
 		cxtLog.Infoln("移动操作成功,返回新的容器id为 ", newId)
@@ -911,42 +911,43 @@ func (a *Api) getNodeNameByNodeAddress(addr string) (name string, err error) {
 }
 
 var (
-    pendingToImaging=make(map[string]bool, 5)
-    imagingLocker sync.RWMutex
+	pendingToImaging = make(map[string]bool, 5)
+	imagingLocker    sync.RWMutex
 )
+
 //容器镜像化
 func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
-    var (
-        err error
-    )
+	var (
+		err error
+	)
 	var data = mux.Vars(req)
 	var resourceId = data["name"]
 
-    var cxtLog = log.WithField("resourceId", resourceId).WithField("Action","Imaging")
-    cxtLog.Info("resource imaging begin.")
-    
-    imagingLocker.Lock()
-    if _,ok:=pendingToImaging[resourceId];ok==true{
-        cxtLog.Warn("container is pending ,please wait....")
-        w.Header().Set("Content-Type","text/plain;charset=utf-8")
-        w.WriteHeader(http.StatusAccepted)
-        fmt.Fprint(w,"Container is pending,please wait...")
-        imagingLocker.Unlock()
-        return
-    }
-    
-    pendingToImaging[resourceId]=true
-    imagingLocker.Unlock()
-    defer func(){
-       delete(pendingToImaging,resourceId)
-    }()
+	var cxtLog = log.WithField("resourceId", resourceId).WithField("Action", "Imaging")
+	cxtLog.Info("resource imaging begin.")
 
-	client,err := a._getSwarmClient()
-    if err!=nil{
-        cxtLog.Error("get swarm client error :"+err.Error())
+	imagingLocker.Lock()
+	if _, ok := pendingToImaging[resourceId]; ok == true {
+		cxtLog.Warn("container is pending ,please wait....")
+		w.Header().Set("Content-Type", "text/plain;charset=utf-8")
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, "Container is pending,please wait...")
+		imagingLocker.Unlock()
+		return
+	}
+
+	pendingToImaging[resourceId] = true
+	imagingLocker.Unlock()
+	defer func() {
+		delete(pendingToImaging, resourceId)
+	}()
+
+	client, err := a._getSwarmClient()
+	if err != nil {
+		cxtLog.Error("get swarm client error :" + err.Error())
 		http.Error(w, "get swarm client error :"+err.Error(), http.StatusInternalServerError)
 		return
-    }
+	}
 
 	resource, err := a.manager.GetResource(resourceId)
 	if err != nil {
@@ -966,7 +967,7 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 	if resource.Status == resourcing.Moving {
 		cxtLog.Warn("Status is Moving, cannot be imaging")
 		w.WriteHeader(http.StatusBadRequest)
-        
+
 		w.Write([]byte("resource is moving ,cannot be imaging"))
 		return
 	}
@@ -980,15 +981,16 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	var containerID = resource.ContainerID
 	info, err := client.InspectContainer(containerID)
-	if info ==nil || err == dockerclient.ErrNotFound {
-		cxtLog.Warn("resource found , container is not found error :"+err.Error())
+	var oldImg = info.Config.Image
+	if info == nil || err == dockerclient.ErrNotFound {
+		cxtLog.Warn("resource found , container is not found error :" + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("resource found, container is not found"))
 		return
 	}
 
 	var repo = a.registryAddr + "/webide-image" + info.Name
-	var tag = fmt.Sprintf("%d",time.Now().Unix())
+	var tag = fmt.Sprintf("%d", time.Now().Unix())
 	_, err = client.Commit(containerID, info.Config, repo, tag, "image by shipyard", "shipyard", true)
 	if err != nil {
 		cxtLog.Error("commit error :" + err.Error())
@@ -998,7 +1000,7 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	var imgName = repo + ":" + tag
 	cxtLog.Info("begin push image " + imgName)
-    time.Sleep(5*time.Second)//wait cluster to refresh all images
+	time.Sleep(5 * time.Second) //wait cluster to refresh all images
 	var begin = time.Now()
 	err = client.PushImage(repo, tag, nil)
 	if err != nil {
@@ -1011,31 +1013,32 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	resource.Status = resourcing.Image
 	resource.Image = imgName
-    resource.ContainerID=""
-    resource.LastUpdateTime=time.Now()
+	resource.ContainerID = ""
+	resource.LastUpdateTime = time.Now()
 	err = a.manager.UpdateResource(resourceId, resource)
 	if err != nil {
 		cxtLog.Error("update db error " + err.Error())
 		http.Error(w, "update db error "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-    cxtLog.Info("update resource ok ,will clean container and image ")
-	err = client.RemoveContainer(containerID, false,false)
+	cxtLog.Info("update resource ok ,will clean container and image ")
+	err = client.RemoveContainer(containerID, false, false)
 	if err != nil {
-		cxtLog.Error("remove container error " + err.Error())
-		http.Error(w, "remove container error "+err.Error(), http.StatusInternalServerError)
-		return
+		cxtLog.Warn("remove container error " + err.Error())
 	}
-    cxtLog.Info("remove old container ok")
-	_, err = client.RemoveImage(imgName, true)
+	cxtLog.Info("remove old container ok")
+	_, err = client.RemoveImage(imgName, false)
 	if err != nil {
-		cxtLog.Error("remove image error " + err.Error())
-		http.Error(w, "remove image error "+err.Error(), http.StatusInternalServerError)
-		return
+		cxtLog.Warn("remove image error " + err.Error())
 	}
-    cxtLog.Infof("remove tmp image %s ok",imgName)
-    cxtLog.Info("resource imaging success.")
-    w.WriteHeader(http.StatusOK)
-    w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-    fmt.Fprint(w,"OK")
+	_, err = client.RemoveImage(oldImg, false)
+	if err != nil {
+		cxtLog.Warn("remove old image error " + err.Error())
+	}
+
+	cxtLog.Infof("remove tmp image %s ok", imgName)
+	cxtLog.Info("resource imaging success.")
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, "OK")
 }

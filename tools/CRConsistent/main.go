@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	dockerclient "github.com/samalba/dockerclient"
 	cring "github.com/shipyard/shipyard/containerresourcing"
@@ -10,8 +13,6 @@ import (
 	"github.com/shipyard/shipyard/tools/CRConsistent/config"
 	"github.com/shipyard/shipyard/tools/CRConsistent/dbaccess"
 	"github.com/spf13/viper"
-	"strings"
-	"time"
 )
 
 var (
