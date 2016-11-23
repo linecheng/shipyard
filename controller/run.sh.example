@@ -1,0 +1,1 @@
+./controller -D server -d tcp://192.168.5.55:4000 -rethinkdb-addr 192.168.5.55:28115 --admin-check-url "http://code.demo.net/single_sign_on/check_admin"

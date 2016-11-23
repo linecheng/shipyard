@@ -999,6 +999,17 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 
 	var imgName = repo + ":" + tag
 	cxtLog.Info("begin push image " + imgName)
+
+	//无论最推送成功或者失败，都要清理本次生成的镜像，下推送会再tag一个新镜像
+	defer func() {
+		_, err = client.RemoveImage(imgName, false)
+		if err != nil {
+			cxtLog.Warnf("remove image %s error : %s ", imgName, err.Error())
+		}
+
+		cxtLog.Infof("remove tmp image %s ok", imgName)
+	}()
+
 	time.Sleep(5 * time.Second) //wait cluster to refresh all images
 	var begin = time.Now()
 	err = client.PushImage(repo, tag, nil)
@@ -1021,17 +1032,16 @@ func (a *Api) imagingContainer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	cxtLog.Info("update resource ok ,will clean container and image ")
+	//推送成功后，将本地的旧容器删除
 	err = client.RemoveContainer(containerID, false, false)
 	if err != nil {
 		cxtLog.Warn("remove container error " + err.Error())
 	}
 	cxtLog.Info("remove old container ok")
-	_, err = client.RemoveImage(imgName, false)
-	if err != nil {
-		cxtLog.Warn("remove image error " + err.Error())
-	}
 
-	cxtLog.Infof("remove tmp image %s ok", imgName)
+	strings.Count("","/")
+
+
 	cxtLog.Info("resource imaging success.")
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
